@@ -15,7 +15,7 @@
 ## 数据
 
 - 3 个可选角色，各有独占机制（`CHARACTERS`）：调查员"洞察"（每回合首张攻击 +3）、疯狂诗人"痛苦灵感"（掉理智抽牌，每回合上限 2 次）、掘墓人"亡者之躯"（回合开始白送 4 点护盾），初始 HP/SAN 各不相同。
-- 46 张卡（`CARDS`），按 `rarity` 分层：起始（角色专属牌组 `STARTER_DECKS`，各 10 张）、普通 / 稀有 / 史诗（奖励池 `POOL`）、诅咒（事件或敌人注入）。
+- 46 张卡（`CARD_DB`），按 `rarity` 分层：起始 30 张（角色专属牌组 `STARTER_DECKS`，各 10 张）、普通 5 / 稀有 6 / 史诗 4（奖励池 `POOL` 按档位抽取）、诅咒 1（事件或敌人注入）。
 - 卡牌效果是扁平字段（`effects: {damage, damageAll, block, draw, energy, sanityGain, selfSanity, selfHp}`），由 `resolveCard` 逐个消费。
 - 敌人意图与敌人库见 `INTENTS` / `ENEMY_DB`。
 
@@ -24,7 +24,7 @@
 | 区域 | 说明 |
 | --- | --- |
 | 样式段 | CSS 变量定义配色（`--bg` / `--green` / `--purple` / `--blood` / `--bone` / `--gold` 等），眼睛图形用内联 SVG（`eyeSvg`）现算 |
-| 数据段 | `CARDS` / `STARTER_DECKS` / `POOL` / `CHARACTERS` / `INTENTS` / `ENEMY_DB` / `EVENTS` / `NODES` |
+| 数据段 | `CARD_DB` / `STARTER_DECKS` / `POOL` / `CHARACTERS` / `INTENTS` / `ENEMY_DB` / `EVENTS` / `NODES` |
 | 状态段 | 全局单一可变对象 `S`（`phase` / `charKey` / `nodeIndex` / `usedEvents` / `player` / `battle` / `pendingCard` / `pendingEvent` / `rewardCtx` / `rewardCards`），`P()` 取当前玩家；卡牌实例用 `uidCounter` + `newCard()` 生成 |
 | 渲染段 | `renderAll` 分派到 `renderTitle` / `renderHUD` / `renderHand` / `renderEnemies` / `renderLog`，一律用 `innerHTML` 字符串拼接重绘 |
 | 流程段 | `startBattle` / `startPlayerTurn` / `onCardClick` / `onEndTurn` / `enemyPhase` / `nextNode` / `startEvent` / `pickEventOption` / `rollRewards` / `pickReward` / `showVictory` / `showGameOver` / `restart` |
