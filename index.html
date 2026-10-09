@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>深渊回响 · 暗黑克苏鲁 Roguelike 卡牌构建 Demo</title>
+<style>
+:root{
+  --bg:#070a08; --panel:#0e130e; --panel2:#131a13;
+  --line:#243324; --green:#4d7a58; --green-hi:#8fce9f;
+  --purple:#5a3a78; --purple-hi:#b995d6;
+  --blood:#8f2d2d; --bone:#cfc8b0; --dim:#7a8272; --gold:#c9a227;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{min-height:100%;}
+body{
+  background:radial-gradient(ellipse at 50% -20%, #0f1c14 0%, var(--bg) 65%);
+  color:var(--bone);
+  font-family:"Noto Serif SC","Source Han Serif SC","SimSun",serif;
+  overflow-x:hidden;
+}
+.eye-bg{position:fixed;top:5%;left:50%;transform:translateX(-50%);width:340px;height:170px;pointer-events:none;opacity:.10;z-index:0;}
+.eye-bg .sclera{width:100%;height:100%;border-radius:50%;background:radial-gradient(ellipse at center,#9fd1a8 0%,#4d7a58 45%,transparent 72%);}
+.eye-bg .pupil{position:absolute;top:50%;left:50%;width:60px;height:104px;border-radius:50%;background:#000;box-shadow:0 0 40px #000;animation:pupil 6s ease-in-out infinite;}
+@keyframes pupil{0%,100%{transform:translate(-50%,-50%) scaleY(1);}50%{transform:translate(-50%,-50%) scaleY(.22);}}
+.runes{position:fixed;bottom:8px;width:100%;text-align:center;color:#26382a;font-size:20px;letter-spacing:20px;pointer-events:none;opacity:.8;z-index:0;}
+.screen{display:none;position:relative;z-index:1;max-width:1080px;margin:0 auto;padding:22px 16px 70px;}
+.screen.active{display:block;}
+
+h1.title{font-size:50px;letter-spacing:16px;color:var(--green-hi);text-align:center;margin-top:44px;text-shadow:0 0 26px rgba(143,206,159,.35);}
+.subtitle{text-align:center;color:var(--dim);letter-spacing:6px;margin-top:14px;}
+.flavor{max-width:620px;margin:26px auto;color:#9aa392;line-height:1.9;font-size:14px;text-align:center;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:18px 0;}
+.center{text-align:center;}
+.panel{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);box-shadow:0 0 18px rgba(0,0,0,.6), inset 0 0 40px rgba(0,0,0,.45);padding:18px;}
+.btn{background:linear-gradient(#182418,#0e150e);border:1px solid var(--green);color:var(--bone);padding:10px 26px;cursor:pointer;font-family:inherit;font-size:15px;letter-spacing:3px;}
+.btn:hover{border-color:var(--green-hi);box-shadow:0 0 12px rgba(143,206,159,.25);}
+.btn:disabled{opacity:.35;cursor:not-allowed;box-shadow:none;}
+.btn.danger{border-color:#6b2a2a;}
+.btn.danger:hover{border-color:#c05050;box-shadow:0 0 12px rgba(190,80,80,.25);}
+.btn.purple{border-color:var(--purple);}
+.btn.purple:hover{border-color:var(--purple-hi);box-shadow:0 0 12px rgba(185,149,214,.25);}
+
+.char-row{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;margin-top:26px;}
+.char-card{width:330px;cursor:default;}
+.char-card h3{color:var(--green-hi);letter-spacing:3px;font-size:20px;}
+.char-card .role{color:var(--purple-hi);font-size:13px;letter-spacing:2px;margin-bottom:10px;}
+.char-card .kv{font-size:13px;margin:3px 0;color:#aeb6a2;}
+.char-card .kv b{color:var(--gold);}
+.char-card .mech{font-size:13px;color:var(--green-hi);margin:10px 0;border-left:3px solid var(--green);padding-left:10px;line-height:1.7;}
+.char-card .bg{font-size:12px;color:#8d9585;line-height:1.8;margin-bottom:12px;}
+.mini-deck{font-size:12px;color:#8d9585;line-height:1.75;border-top:1px dashed var(--line);padding-top:8px;margin-bottom:12px;}
+.mini-deck span{margin-right:8px;white-space:nowrap;display:inline-block;}
+
+.ev-title{font-size:30px;color:var(--green-hi);letter-spacing:8px;text-align:center;margin-top:30px;}
+.ev-desc{max-width:720px;margin:20px auto;line-height:2;color:#b9c0ad;font-size:15px;text-align:center;}
+.ev-opts{display:flex;flex-direction:column;gap:12px;max-width:640px;margin:26px auto;}
+.opt{display:flex;flex-direction:column;gap:6px;text-align:left;padding:14px 18px;}
+.opt-label{font-size:16px;letter-spacing:2px;}
+.opt-effect{font-size:13px;color:var(--dim);}
+.ev-result{max-width:640px;margin:18px auto;text-align:center;color:var(--gold);line-height:1.9;font-size:14px;min-height:24px;}
+
+.topbar{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:14px;flex-wrap:wrap;gap:8px;}
+#node-info{color:var(--gold);letter-spacing:3px;font-size:15px;}
+#turn-info{color:var(--dim);letter-spacing:2px;}
+.battle-wrap{display:flex;gap:16px;flex-wrap:wrap;}
+.player-panel{flex:1 1 300px;}
+.enemy-panel{flex:1.2 1 340px;position:relative;overflow:hidden;}
+.e-glyph{position:absolute;right:6px;top:-10px;font-size:110px;color:#1c2a1e;pointer-events:none;line-height:1;}
+.p-name{color:var(--green-hi);font-size:18px;letter-spacing:2px;margin-bottom:8px;}
+.e-name{color:#d0a0a0;font-size:20px;letter-spacing:3px;}
+.e-tier{color:var(--purple-hi);font-size:12px;letter-spacing:2px;margin:2px 0 8px;}
+.statline{display:flex;align-items:center;gap:10px;margin:7px 0;font-size:14px;}
+.statline>span:first-child{width:36px;color:var(--dim);}
+.bar{flex:1;height:14px;background:#0a0f0a;border:1px solid var(--line);position:relative;}
+.fill{height:100%;transition:width .35s ease;}
+.bar.hp .fill{background:linear-gradient(90deg,#5a1a1a,#a03434);}
+.bar.san .fill{background:linear-gradient(90deg,#3a2550,#7c55a8);}
+.num{min-width:70px;text-align:right;font-size:13px;color:#cfc8b0;}
+.block-tag{color:#9fce9f;font-weight:bold;}
+.orb{display:inline-block;width:18px;height:18px;border-radius:50%;border:1px solid var(--green);margin-right:4px;vertical-align:middle;background:transparent;}
+.orb.on{background:radial-gradient(circle at 35% 35%,#b7e6c2,#4d7a58);box-shadow:0 0 8px rgba(143,206,159,.5);}
+.intent{margin-top:10px;border:1px dashed var(--purple);padding:9px 12px;color:var(--purple-hi);font-size:14px;line-height:1.6;background:rgba(90,58,120,.08);}
+.mech{margin-top:8px;font-size:12px;color:var(--dim);line-height:1.6;}
+#buffs,#e-buffs{margin-top:8px;font-size:12px;color:#aeb6a2;line-height:1.8;}
+#e-buffs .warn{color:#d9a6a6;}
+
+#log{margin:14px 0;height:118px;overflow-y:auto;border:1px solid var(--line);background:rgba(6,10,6,.7);padding:8px 12px;font-size:13px;line-height:1.75;}
+#log div{white-space:pre-wrap;}
+.l-dmg{color:#d98a8a;} .l-block{color:#9fce9f;} .l-sanity{color:#b995d6;}
+.l-sys{color:#6f7a68;} .l-heal{color:#8fd6a8;} .l-gold{color:#d8b94a;}
+
+.hand-row{display:flex;gap:12px;align-items:flex-start;}
+.piles{width:120px;font-size:13px;color:var(--dim);line-height:2;padding-top:30px;}
+.piles b{color:var(--green-hi);}
+#hand{flex:1;display:flex;flex-wrap:wrap;gap:10px;justify-content:center;min-height:220px;padding-top:16px;}
+.actions{width:140px;display:flex;flex-direction:column;gap:10px;padding-top:30px;}
+
+.card{width:152px;min-height:198px;background:linear-gradient(180deg,#121a12,#0b100b);border:1px solid var(--green);position:relative;cursor:pointer;padding:26px 10px 10px;transition:transform .12s ease, box-shadow .12s ease;box-shadow:0 4px 12px rgba(0,0,0,.55);}
+.card:hover{transform:translateY(-12px);box-shadow:0 10px 20px rgba(0,0,0,.7),0 0 14px rgba(143,206,159,.2);}
+.card .cost{position:absolute;top:-11px;left:-11px;width:30px;height:30px;border-radius:50%;background:#101a10;border:1px solid var(--green-hi);color:var(--green-hi);display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:15px;box-shadow:0 0 8px rgba(0,0,0,.8);}
+.card .c-name{font-size:15px;color:var(--bone);letter-spacing:1px;margin-bottom:6px;text-align:center;}
+.card .c-tr{font-size:11px;color:var(--dim);text-align:center;margin-bottom:8px;letter-spacing:1px;}
+.card .c-desc{font-size:12px;color:#aeb6a2;line-height:1.7;text-align:center;}
+.card.t-atk{border-color:#6b2a2a;} .card.t-atk .cost{border-color:#c05050;color:#c05050;}
+.card.t-def{border-color:#3f6f4f;} .card.t-def .cost{border-color:#8fce9f;color:#8fce9f;}
+.card.t-skl{border-color:#5a3a78;} .card.t-skl .cost{border-color:#b995d6;color:#b995d6;}
+.card.t-cur{border-style:dashed;border-color:#555;}
+.card.t-cur .cost{border-color:#999;color:#999;}
+.card.t-cur .c-name{color:#a99;}
+.card.unplayable{opacity:.45;cursor:not-allowed;}
+.card.unplayable:hover{transform:none;box-shadow:0 4px 12px rgba(0,0,0,.55);}
+.card.sac-target{border-color:var(--purple-hi);box-shadow:0 0 14px rgba(185,149,214,.5);}
+
+.reward-row{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;margin:26px 0;}
+.reward-row .card{cursor:pointer;}
+.reward-row .card:hover{border-color:var(--gold);}
+.reward-title{font-size:26px;color:var(--gold);letter-spacing:6px;text-align:center;margin-top:34px;}
+.reward-sub{text-align:center;color:var(--dim);margin-top:10px;font-size:14px;line-height:1.8;}
+
+.end-title{font-size:44px;text-align:center;letter-spacing:12px;margin-top:80px;}
+.end-title.lose{color:#c05050;text-shadow:0 0 30px rgba(190,80,80,.4);}
+.end-title.win{color:var(--green-hi);text-shadow:0 0 30px rgba(143,206,159,.4);}
+.end-reason{max-width:560px;margin:26px auto;text-align:center;color:#aeb6a2;line-height:2;font-size:15px;}
+
+@media (max-width:760px){
+  .hand-row{flex-direction:column;}
+  .piles{width:auto;display:flex;gap:14px;padding-top:0;}
+  .actions{width:auto;flex-direction:row;padding-top:0;}
+}
+</style>
+</head>
+<body>
+
+<div class="eye-bg"><div class="sclera"></div><div class="pupil"></div></div>
+<div class="runes">ᚨ ᛉ ᛞ ᚹ ᛝ ᛟ ᚨ ᛉ ᛞ ᚹ ᛝ ᛟ</div>
+
+<!-- 标题界面 -->
+<div id="screen-title" class="screen active">
+  <h1 class="title">深 渊 回 响</h1>
+  <div class="subtitle">ECHOS OF THE ABYSS · 暗黑克苏鲁 Roguelike 卡牌构建</div>
+  <div class="flavor">
+    潮水退去的那个冬天，灯塔最后一任守塔人在日志里写道：<br>
+    「别数浪。它在听你数数。」<br><br>
+    单局结构：第一层共 5 个节点，顺序固定——事件 → 战斗 → 事件 → 战斗 → 守关战。<br>
+    核心资源：生命与理智，任意一项归零即刻失败。<br>
+    每回合 3 点能量，抽 5 张牌。牌组只增不减。
+  </div>
+  <div class="center"><button class="btn" onclick="showSelect()">提 灯 入 局</button></div>
+</div>
+
+<!-- 角色选择 -->
+<div id="screen-select" class="screen">
+  <h1 class="title" style="font-size:32px;letter-spacing:10px;margin-top:10px;">选 择 你 的 调 查 员</h1>
+  <div class="char-row" id="char-row"></div>
+</div>
+
+<!-- 事件 -->
+<div id="screen-event" class="screen">
+  <div class="panel" style="margin-top:20px;">
+    <div class="ev-title" id="ev-title"></div>
+    <div class="ev-desc" id="ev-desc"></div>
+    <div class="ev-opts" id="ev-options"></div>
+    <div class="ev-result" id="ev-result"></div>
+    <div class="center"><button class="btn" id="ev-continue" style="display:none;" onclick="nextNode()">继 续 前 行</button></div>
+  </div>
+</div>
+
+<!-- 战斗 -->
+<div id="screen-battle" class="screen">
+  <div class="topbar">
+    <div id="node-info"></div>
+    <div id="turn-info"></div>
+  </div>
+  <div class="battle-wrap">
+    <div class="player-panel panel">
+      <div class="p-name" id="p-name"></div>
+      <div class="statline"><span>生命</span><div class="bar hp"><div class="fill" id="hp-fill"></div></div><span class="num" id="hp-text"></span></div>
+      <div class="statline"><span>理智</span><div class="bar san"><div class="fill" id="san-fill"></div></div><span class="num" id="san-text"></span></div>
+      <div class="statline"><span>护盾</span><span class="block-tag" id="block-text"></span></div>
+      <div class="statline"><span>能量</span><span id="energy-orbs"></span></div>
+      <div id="buffs"></div>
+    </div>
+    <div class="enemy-panel panel">
+      <div class="e-glyph" id="e-glyph"></div>
+      <div class="e-name" id="e-name"></div>
+      <div class="e-tier" id="e-tier"></div>
+      <div class="statline"><span>生命</span><div class="bar hp"><div class="fill" id="ehp-fill"></div></div><span class="num" id="ehp-text"></span></div>
+      <div class="statline"><span>护盾</span><span class="block-tag" id="eblock-text"></span></div>
+      <div class="intent" id="intent"></div>
+      <div class="mech" id="e-mech"></div>
+      <div id="e-buffs"></div>
+    </div>
+  </div>
+  <div id="log"></div>
+  <div class="hand-row">
+    <div class="piles">
+      <div>抽牌堆 <b id="draw-count"></b></div>
+      <div>弃牌堆 <b id="discard-count"></b></div>
+      <div>牌组总数 <b id="deck-count"></b></div>
+    </div>
+    <div id="hand"></div>
+    <div class="actions">
+      <button class="btn purple" id="btn-sac" onclick="toggleSac()">祭献 +1能量</button>
+      <button class="btn danger" id="btn-end" onclick="endTurn()">结束回合</button>
+    </div>
+  </div>
+</div>
+
+<!-- 奖励 -->
+<div id="screen-reward" class="screen">
+  <div class="reward-title">战 斗 胜 利</div>
+  <div class="reward-sub">深渊献上战利品——从 3 张牌中选择 1 张加入牌组，也可以放弃。<br>牌组只增不减，没有任何移除卡牌的手段。</div>
+  <div class="reward-row" id="reward-row"></div>
+  <div class="center"><button class="btn danger" onclick="skipReward()">放 弃 奖 励</button></div>
+</div>
+
+<!-- 结束 -->
+<div id="screen-end" class="screen">
+  <div class="end-title" id="end-title"></div>
+  <div class="end-reason" id="end-reason"></div>
+  <div class="end-reason" id="end-stats"></div>
+  <div class="center"><button class="btn" onclick="location.reload()">重 新 开 始</button></div>
+</div>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));const t=a[i];a[i]=a[j];a[j]=t;}return a;}
+function rnd(n){return Math.floor(Math.random()*n);}
+
+/* 卡牌定义 字段固定：name/cost/type/rarity/description/effects */
+const CARD_DEFS={
+  gun_shot:{name:"手枪射击",cost:1,type:"攻击",rarity:"普通",desc:"造成 6 点伤害。",effects:{damage:6}},
+  revolver:{name:"老式左轮",cost:2,type:"攻击",rarity:"普通",desc:"造成 10 点伤害。",effects:{damage:10}},
+  stance:{name:"持枪警戒",cost:1,type:"防御",rarity:"普通",desc:"获得 6 点护盾。",effects:{block:6}},
+  cover:{name:"掩体躲避",cost:2,type:"防御",rarity:"普通",desc:"获得 11 点护盾。",effects:{block:11}},
+  deduce:{name:"推演",cost:1,type:"技能",rarity:"普通",desc:"抽 2 张牌。",effects:{draw:2}},
+  night_patrol:{name:"深夜勘查",cost:0,type:"技能",rarity:"普通",desc:"抽 1 张牌。",effects:{draw:1}},
+  weakness:{name:"弱点洞察",cost:1,type:"攻击",rarity:"普通",desc:"造成 5 点伤害，抽 1 张牌。",effects:{damage:5,draw:1}},
+  silver:{name:"银质子弹",cost:2,type:"攻击",rarity:"罕见",desc:"造成 14 点伤害。",effects:{damage:14}},
+  instinct:{name:"侦探直觉",cost:1,type:"技能",rarity:"罕见",desc:"获得 8 点护盾，抽 1 张牌。",effects:{block:8,draw:1}},
+  perfect:{name:"完美推理",cost:3,type:"攻击",rarity:"罕见",desc:"造成 20 点伤害。",effects:{damage:20}},
+  flame_sigil:{name:"火焰符咒",cost:1,type:"攻击",rarity:"普通",desc:"造成 7 点伤害。",effects:{damage:7}},
+  void_touch:{name:"虚空之触",cost:1,type:"攻击",rarity:"普通",desc:"造成 5 点伤害，失去 2 点理智。",effects:{damage:5,sanityLoss:2}},
+  rune_guard:{name:"符文护壁",cost:1,type:"防御",rarity:"普通",desc:"获得 7 点护盾。",effects:{block:7}},
+  shadow_veil:{name:"暗影帷幕",cost:2,type:"防御",rarity:"普通",desc:"获得 12 点护盾。",effects:{block:12}},
+  whisper_spell:{name:"低语咒文",cost:0,type:"技能",rarity:"普通",desc:"抽 1 张牌。",effects:{draw:1}},
+  sacrifice_rite:{name:"献祭之礼",cost:1,type:"技能",rarity:"普通",desc:"失去 4 点理智，抽 2 张牌。",effects:{sanityLoss:4,draw:2}},
+  evil_eye:{name:"邪眼凝视",cost:2,type:"攻击",rarity:"普通",desc:"造成 11 点伤害。",effects:{damage:11}},
+  soul_drain:{name:"灵魂汲取",cost:1,type:"攻击",rarity:"罕见",desc:"造成 7 点伤害，恢复 3 点理智。",effects:{damage:7,sanityGain:3}},
+  elder_blessing:{name:"古神赐福",cost:2,type:"技能",rarity:"罕见",desc:"获得 10 点护盾，恢复 3 点理智。",effects:{block:10,sanityGain:3}},
+  starfall:{name:"星辰陨落",cost:3,type:"攻击",rarity:"罕见",desc:"造成 19 点伤害。",effects:{damage:19}},
+  axe_chop:{name:"战斧劈砍",cost:1,type:"攻击",rarity:"普通",desc:"造成 8 点伤害。",effects:{damage:8}},
+  sweep:{name:"横扫千军",cost:2,type:"攻击",rarity:"普通",desc:"造成 12 点伤害。",effects:{damage:12}},
+  iron_shield:{name:"铁盾格挡",cost:1,type:"防御",rarity:"普通",desc:"获得 8 点护盾。",effects:{block:8}},
+  heavy_cloak:{name:"重甲披风",cost:2,type:"防御",rarity:"普通",desc:"获得 13 点护盾。",effects:{block:13}},
+  war_cry:{name:"战嚎",cost:1,type:"技能",rarity:"普通",desc:"获得 6 点护盾，抽 1 张牌。",effects:{block:6,draw:1}},
+  veteran_grit:{name:"老兵坚韧",cost:0,type:"技能",rarity:"普通",desc:"获得 4 点护盾。",effects:{block:4}},
+  armor_break:{name:"破甲一击",cost:2,type:"攻击",rarity:"普通",desc:"造成 9 点伤害，抽 1 张牌。",effects:{damage:9,draw:1}},
+  slaughter:{name:"屠戮风暴",cost:3,type:"攻击",rarity:"罕见",desc:"造成 22 点伤害。",effects:{damage:22}},
+  blood_roar:{name:"血性咆哮",cost:1,type:"技能",rarity:"罕见",desc:"恢复 6 点生命。",effects:{hpGain:6}},
+  death_charge:{name:"决死冲锋",cost:2,type:"攻击",rarity:"罕见",desc:"造成 16 点伤害，失去 3 点生命。",effects:{damage:16,hpLoss:3}},
+  whispers:{name:"疯狂低语",cost:0,type:"诅咒",rarity:"诅咒",desc:"不可打出。回合结束时若在你手牌中，失去 2 点理智。",effects:{unplayable:true,endTurnSanityLoss:2}},
+  tentacle_nightmare:{name:"触手梦魇",cost:1,type:"诅咒",rarity:"诅咒",desc:"邪祟借你之手施暴：造成 6 点伤害，失去 4 点理智。",effects:{damage:6,sanityLoss:4}},
+  dead_name:{name:"死者之名",cost:2,type:"诅咒",rarity:"诅咒",desc:"念出亡者真名：抽 2 张牌，失去 5 点理智。",effects:{draw:2,sanityLoss:5}},
+  hunter_shot:{name:"猎枪轰鸣",cost:2,type:"攻击",rarity:"罕见",desc:"造成 13 点伤害，抽 1 张牌。",effects:{damage:13,draw:1}},
+  judgment:{name:"审判之锤",cost:3,type:"攻击",rarity:"史诗",desc:"造成 26 点伤害。",effects:{damage:26}},
+  cross_guard:{name:"十字圣卫",cost:2,type:"防御",rarity:"罕见",desc:"获得 15 点护盾。",effects:{block:15}},
+  mind_wall:{name:"心灵壁垒",cost:1,type:"防御",rarity:"罕见",desc:"获得 8 点护盾，恢复 2 点理智。",effects:{block:8,sanityGain:2}},
+  suture:{name:"缝合创伤",cost:1,type:"技能",rarity:"罕见",desc:"恢复 8 点生命。",effects:{hpGain:8}},
+  calm:{name:"镇定自若",cost:0,type:"技能",rarity:"罕见",desc:"恢复 4 点理智。",effects:{sanityGain:4}},
+  blood_burn:{name:"燃血秘术",cost:0,type:"攻击",rarity:"罕见",desc:"造成 8 点伤害，失去 3 点生命。",effects:{damage:8,hpLoss:3}},
+  time_rift:{name:"时之裂隙",cost:1,type:"技能",rarity:"史诗",desc:"额外获得 2 点能量。",effects:{energyGain:2}},
+  abyss_gaze:{name:"深渊凝视",cost:2,type:"攻击",rarity:"罕见",desc:"造成 9 点伤害，敌人下次攻击伤害-3。",effects:{damage:9,weaken:3}},
+  crows:{name:"群鸦袭扰",cost:2,type:"攻击",rarity:"罕见",desc:"造成 6 点伤害，共 2 次。",effects:{damage:6,hits:2}},
+  rune_wall:{name:"符文铁壁",cost:2,type:"防御",rarity:"史诗",desc:"获得 18 点护盾。",effects:{block:18}},
+  forbidden:{name:"禁忌启元",cost:1,type:"技能",rarity:"罕见",desc:"抽 3 张牌，失去 3 点理智。",effects:{draw:3,sanityLoss:3}}
+};
+const REWARD_IDS=["hunter_shot","judgment","cross_guard","mind_wall","suture","calm","blood_burn","time_rift","abyss_gaze","crows","rune_wall","forbidden"];
+
+/* 角色定义 */
+const CHAR_DEFS={
+  edmund:{name:"艾德蒙·格雷",title:"执灯调查员",maxHp:60,maxSanity:40,energy:3,
+    mech:"理性推演：每回合你打出的第一张攻击牌，每次打击伤害 +3。",
+    style:"均衡稳健：攻防兼备，靠抽牌与精准输出磨垮敌人。",
+    bg:"前市警局探长。追查港口失踪案时，他在档案室深处发现了以自己笔迹写成的口供——落款日期是明天。他烧掉警徽，提灯走进夜里，要把真相从深渊嘴里抠出来。",
+    deck:["gun_shot","revolver","stance","cover","deduce","night_patrol","weakness","silver","instinct","perfect"]},
+  seraphina:{name:"塞拉菲娜",title:"低语术士",maxHp:50,maxSanity:55,energy:3,
+    mech:"禁忌祭献：每回合限一次，你可以弃掉 1 张手牌，获得 1 点能量。",
+    style:"以理智为燃料的爆发流：牌多、技多，在疯狂边缘起舞。",
+    bg:"她生来能听见墙壁背后的低语。别人当那是疯病，她当那是课业。二十年来她学会了三千个不该念出的音节，以及如何用别人的噩梦付房租。",
+    deck:["flame_sigil","void_touch","rune_guard","shadow_veil","whisper_spell","sacrifice_rite","evil_eye","soul_drain","elder_blessing","starfall"]},
+  karl:{name:"卡尔·血斧",title:"锈盾佣兵",maxHp:70,maxSanity:30,energy:3,
+    mech:"钢铁之躯：每回合开始时获得 4 点护盾。",
+    style:"重甲坦克：血厚盾硬，用身体硬吃恐惧，用斧头回答一切。",
+    bg:"他给探险队当了十二年护卫，队伍换了十一批。同伴们消失的方式越来越离奇，而他的斧刃越磨越亮。他不信神，不信海，只信握紧的斧柄和挡在身前的盾。",
+    deck:["axe_chop","sweep","iron_shield","heavy_cloak","war_cry","veteran_grit","armor_break","slaughter","blood_roar","death_charge"]}
+};
+
+/* 敌人定义（意图永远提前 1 回合公开） */
+const ENEMY_DEFS={
+  cultist:{name:"深潜信徒",maxHp:26,tier:"普通",glyph:"ᚨ",
+    mech:"狂乱：生命低于 50% 时，攻击伤害 +2。",
+    enrage:{at:0.5,dmg:2},
+    intents:[
+      {name:"撕咬",dmg:7},
+      {name:"疯狂祷言",sanity:4}
+    ]},
+  horror:{name:"羽翼恐魔",maxHp:20,tier:"普通",glyph:"ᚹ",
+    mech:"翼击成双：『双爪撕扯』会命中 2 次，每次 5 点伤害。",
+    intents:[
+      {name:"掠袭",dmg:9},
+      {name:"尖啸",sanity:5},
+      {name:"双爪撕扯",dmg:5,hits:2}
+    ]},
+  ghoul:{name:"掘墓食尸鬼",maxHp:32,tier:"普通",glyph:"ᛞ",
+    mech:"噬血：执行『吞噬』后恢复 5 点生命。",
+    intents:[
+      {name:"抓挠",dmg:8},
+      {name:"吞噬",dmg:12,heal:5},
+      {name:"腐臭气息",sanity:6}
+    ]},
+  spawn:{name:"触手孽物",maxHp:38,tier:"普通",glyph:"ᛝ",
+    mech:"再生：每回合结束恢复 2 点生命。",
+    regen:2,
+    intents:[
+      {name:"缠绕抽击",dmg:6,hits:2},
+      {name:"精神榨取",sanity:8},
+      {name:"黏液护膜",block:9}
+    ]},
+  watcher:{name:"星之眷者",maxHp:44,tier:"精英",glyph:"ᛉ",
+    mech:"虚空侵蚀：每次攻击额外造成 2 点理智伤害。",
+    intents:[
+      {name:"虚空箭",dmg:11,sanity:2},
+      {name:"疯狂凝视",sanity:7},
+      {name:"恒星护体",block:10}
+    ]},
+  boss:{name:"渊口守望者",maxHp:70,tier:"守关",glyph:"ᛟ",
+    mech:"深渊复苏：每回合结束恢复 3 点生命；生命低于 50% 时攻击伤害 +3。",
+    regen:3,enrage:{at:0.5,dmg:3},
+    intents:[
+      {name:"触手猛击",dmg:14},
+      {name:"深渊低语",sanity:10},
+      {name:"暗鳞壁障",block:12}
+    ]}
+};
+
+/* 事件定义（第一层随机抽取 2 个，不重复） */
+const EVENT_DEFS=[
+  {id:"altar",title:"血 月 祭 坛",
+   desc:"湿地中央立着一圈黑曜石，石缝里凝着暗红结晶。头顶的月亮泛着熟透果实般的红色，你听见自己的心跳正在与某种巨大的节拍同步。石碑上的刻痕还在渗血——是新鲜的。",
+   options:[
+    {label:"献上鲜血",effect:"失去 6 点生命，获得 1 张随机罕见牌",
+     apply(){loseHp(6);if(!G.over)grantRandomCard("罕见");}},
+    {label:"触碰符文",effect:"失去 5 点理智，恢复 10 点生命",
+     apply(){loseSanity(5);if(!G.over)healHp(10);}},
+    {label:"默然离开",effect:"无事发生",
+     apply(){}}
+   ]},
+  {id:"stall",title:"尸 潮 书 摊",
+   desc:"一个兜帽摊主守着满是霉斑的书摊，摊位木牌上写着：『以忆换卷，以魂抵账』。你翻不动那些书页——它们自己在翻。摊主的手指比正常的要多出两根。",
+   options:[
+    {label:"阅读禁书",effect:"失去 6 点理智，获得 1 张随机罕见牌",
+     apply(){loseSanity(6);if(!G.over)grantRandomCard("罕见");}},
+    {label:"购入护符",effect:"恢复 6 点理智",
+     apply(){gainSanity(6);}},
+    {label:"偷走封印卷轴",effect:"获得 1 张随机罕见牌，并获得诅咒牌『疯狂低语』",
+     apply(){grantRandomCard("罕见");if(!G.over)grantCard("whispers");}}
+   ]},
+  {id:"madman",title:"疯 者 的 警 告",
+   desc:"码头废弃岗亭里缩着一个披麻袋的老人，他的眼睛是浑浊的乳白色，却死死『盯』着你。『它数过你的名字，』他说，『在很深的地方，数了三遍。』他的脚边摆着一排用粉笔写的倒计时。",
+   options:[
+    {label:"聆听低语",effect:"失去 5 点理智，获得 1 张随机史诗牌",
+     apply(){loseSanity(5);if(!G.over)grantRandomCard("史诗");}},
+    {label:"分他干粮",effect:"失去 3 点生命，获得 1 张随机罕见牌",
+     apply(){loseHp(3);if(!G.over)grantRandomCard("罕见");}},
+    {label:"悄然离去",effect:"无事发生",
+     apply(){}}
+   ]},
+  {id:"corpse",title:"搁 浅 的 怪 尸",
+   desc:"退潮的滩涂上搁着一具尸体——如果那还能叫尸体的话。它有人的四肢，肋骨外侧却裂开了两排鳃孔。附近的村民用盐围着它画了一圈，没人敢靠近。",
+   options:[
+    {label:"搜刮遗物",effect:"失去 4 点理智，获得 1 张随机牌（稀有度随机）",
+     apply(){loseSanity(4);if(!G.over)grantRandomCard(null);}},
+    {label:"掩埋尸体",effect:"恢复 5 点理智",
+     apply(){gainSanity(5);}},
+    {label:"绕道离开",effect:"无事发生",
+     apply(){}}
+   ]},
+  {id:"cart",title:"倾 覆 的 药 剂 车",
+   desc:"一辆药剂师的货车翻在沟里，车夫不知所踪。碎裂的木箱间滚着几瓶荧光绿的液体，标签上写着『肌复活合剂·勿内服』，字迹被人划掉又重新写上：『有效』。",
+   options:[
+    {label:"一饮而尽",effect:"恢复 12 点生命，失去 3 点理智",
+     apply(){healHp(12);loseSanity(3);}},
+    {label:"装瓶带走",effect:"获得 1 张『镇定自若』",
+     apply(){grantCard("calm");}},
+    {label:"碎瓶灭迹",effect:"无事发生",
+     apply(){}}
+   ]}
+];
+
+/* 全局状态 */
+let G=null;
+const PATH=["event","battle","event","battle","boss"];
+const BATTLE_POOL=["cultist","horror","ghoul","spawn","watcher"];
+
+function showScreen(id){
+  document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
+  $(id).classList.add("active");
+}
+
+function addLog(msg,cls){
+  if(!G)return;
+  G.log.unshift({msg,cls:cls||"l-sys"});
+  if(G.log.length>60)G.log.pop();
+}
+function ename(){return "『"+ENEMY_DEFS[G.enemyId].name+"』";}
+function loseHp(n){
+  if(G.over)return;
+  G.hp=Math.max(0,G.hp-n);
+  addLog("你失去 "+n+" 点生命。","l-dmg");
+  if(G.hp<=0)defeat("生命归零——你的血汇入了潮水，潮水记住了你的名字。");
+}
+function loseSanity(n){
+  if(G.over)return;
+  G.sanity=Math.max(0,G.sanity-n);
+  addLog("你失去 "+n+" 点理智。","l-sanity");
+  if(G.sanity<=0)defeat("理智归零——低语终于变得清晰可辨，你听懂了每一个字。");
+}
+function healHp(n){
+  if(G.over)return;
+  G.hp=Math.min(G.maxHp,G.hp+n);
+  addLog("你恢复 "+n+" 点生命。","l-heal");
+}
+function gainSanity(n){
+  if(G.over)return;
+  G.sanity=Math.min(G.maxSanity,G.sanity+n);
+  addLog("你恢复 "+n+" 点理智。","l-heal");
+}
+function grantCard(id){
+  G.deck.push(id);
+  G.gained.push(CARD_DEFS[id].name);
+}
+function grantRandomCard(rarity){
+  const pool=REWARD_IDS.filter(id=>!rarity||CARD_DEFS[id].rarity===rarity);
+  if(!pool.length)return;
+  grantCard(pool[rnd(pool.length)]);
+}
+function defeat(reason){
+  G.over=true;
+  showEnd(false,reason);
+}
+
+function showSelect(){
+  const row=$("char-row");row.innerHTML="";
+  for(const key of Object.keys(CHAR_DEFS)){
+    const c=CHAR_DEFS[key];
+    const el=document.createElement("div");
+    el.className="panel char-card";
+    let deckHtml="";
+    for(const id of c.deck){
+      const cd=CARD_DEFS[id];
+      deckHtml+="<span>["+cd.cost+"] "+cd.name+"</span>";
+    }
+    el.innerHTML=
+      "<h3>"+c.name+"</h3>"+
+      "<div class='role'>"+c.title+"</div>"+
+      "<div class='kv'>生命 <b>"+c.maxHp+"</b> ｜ 理智 <b>"+c.maxSanity+"</b> ｜ 能量 <b>"+c.energy+"/回合</b> ｜ 抽牌 <b>5/回合</b></div>"+
+      "<div class='mech'>"+c.mech+"</div>"+
+      "<div class='kv' style='color:#8d9585;'>玩法风格："+c.style+"</div>"+
+      "<div class='bg'>"+c.bg+"</div>"+
+      "<div class='mini-deck'>"+deckHtml+"</div>"+
+      "<div class='center'><button class='btn'>选 择 此 角 色</button></div>";
+    el.querySelector("button").onclick=()=>startRun(key);
+    row.appendChild(el);
+  }
+  showScreen("screen-select");
+}
+
+function startRun(charId){
+  const def=CHAR_DEFS[charId];
+  G={
+    charId,def,
+    hp:def.maxHp,maxHp:def.maxHp,
+    sanity:def.maxSanity,maxSanity:def.maxSanity,
+    energy:3,block:0,
+    deck:[...def.deck],
+    draw:[],discard:[],hand:[],
+    nodeIdx:-1,path:PATH,
+    battleQueue:shuffle([...BATTLE_POOL]),
+    usedEvents:[],
+    enemyId:null,enemy:null,enemyBlock:0,enemyWeaken:0,enemyIntent:null,
+    turn:1,firstAttackUsed:false,sacrificed:false,sacMode:false,
+    battleOver:false,over:false,busy:false,
+    gained:[],log:[]
+  };
+  nextNode();
+}
+
+function nextNode(){
+  if(!G||G.over)return;
+  G.nodeIdx++;
+  if(G.nodeIdx>=G.path.length){
+    showEnd(true,"灯塔的光在身后熄灭，而你还在往前走。第一层已被你踩在脚下——深渊在更深处等你。");
+    return;
+  }
+  const t=G.path[G.nodeIdx];
+  if(t==="event")showEvent();
+  else startBattle(G.battleQueue.pop());
+}
+
+function pickEvent(){
+  const pool=EVENT_DEFS.filter(e=>!G.usedEvents.includes(e.id));
+  const ev=pool[rnd(pool.length)];
+  G.usedEvents.push(ev.id);
+  return ev;
+}
+function showEvent(){
+  const ev=pickEvent();
+  $("ev-title").textContent=ev.title;
+  $("ev-desc").textContent=ev.desc;
+  const box=$("ev-options");box.innerHTML="";
+  $("ev-result").innerHTML="";
+  $("ev-continue").style.display="none";
+  ev.options.forEach(op=>{
+    const b=document.createElement("button");
+    b.className="btn opt";
+    b.innerHTML="<span class='opt-label'>"+op.label+"</span><span class='opt-effect'>"+op.effect+"</span>";
+    b.onclick=()=>{
+      if(G.over)return;
+      box.querySelectorAll("button").forEach(x=>x.disabled=true);
+      G.gained=[];
+      op.apply();
+      let res="结果："+op.effect;
+      if(G.gained.length)res+="<br>获得卡牌："+G.gained.map(n=>"『"+n+"』").join("、");
+      $("ev-result").innerHTML=res;
+      if(!G.over)$("ev-continue").style.display="inline-block";
+    };
+    box.appendChild(b);
+  });
+  showScreen("screen-event");
+}
+
+function startBattle(id){
+  G.enemyId=id;
+  const def=ENEMY_DEFS[id];
+  G.enemy={hp:def.maxHp};
+  G.enemyBlock=0;G.enemyWeaken=0;
+  G.battleOver=false;G.turn=1;
+  G.draw=shuffle([...G.deck]);
+  G.discard=[];G.hand=[];
+  G.enemyIntent=pickIntent();
+  addLog("遭遇 "+def.tier+"敌人『"+def.name+"』！","l-dmg");
+  addLog(def.name+" 的下一步意图："+intentText(),"l-sys");
+  beginTurn();
+  showScreen("screen-battle");
+}
+function pickIntent(){
+  const pool=ENEMY_DEFS[G.enemyId].intents;
+  let cand=pool.filter(i=>i!==G.enemyIntent);
+  if(!cand.length)cand=pool;
+  return cand[rnd(cand.length)];
+}
+function atkBonus(){
+  const def=ENEMY_DEFS[G.enemyId];
+  if(def.enrage&&G.enemy.hp<def.maxHp*def.enrage.at)return def.enrage.dmg;
+  return 0;
+}
+function intentText(){
+  const it=G.enemyIntent;
+  const parts=[];
+  if(it.dmg){
+    let d=it.dmg+atkBonus();
+    if(G.enemyWeaken>0)d=Math.max(0,d-G.enemyWeaken);
+    parts.push("造成 "+d+((it.hits&&it.hits>1)?"×"+it.hits:"")+" 点伤害");
+  }
+  if(it.sanity)parts.push("造成 "+it.sanity+" 点理智伤害");
+  if(it.block)parts.push("获得 "+it.block+" 点护盾");
+  if(it.heal)parts.push("恢复 "+it.heal+" 点生命");
+  const tag=it.dmg?"【攻击】":(it.sanity?"【侵蚀】":(it.block?"【护盾】":"【汲取】"));
+  return tag+" "+it.name+"："+parts.join("，");
+}
+
+function beginTurn(){
+  G.block=0;
+  if(G.charId==="karl"){G.block+=4;addLog("钢铁之躯：获得 4 点护盾。","l-block");}
+  G.energy=3;
+  G.firstAttackUsed=false;G.sacrificed=false;G.sacMode=false;
+  drawCards(5);
+  renderBattle();
+}
+function drawCards(n){
+  for(let k=0;k<n;k++){
+    if(G.draw.length===0){
+      if(G.discard.length===0)break;
+      G.draw=shuffle(G.discard);
+      G.discard=[];
+      addLog("弃牌堆已洗回抽牌堆。","l-sys");
+    }
+    G.hand.push(G.draw.pop());
+  }
+}
+
+function typeClass(c){
+  if(c.type==="攻击")return "t-atk";
+  if(c.type==="防御")return "t-def";
+  if(c.type==="技能")return "t-skl";
+  return "t-cur";
+}
+
+function playCard(i){
+  if(!G||G.over||G.battleOver||G.busy)return;
+  if(G.sacMode){doSacrifice(i);return;}
+  const id=G.hand[i];
+  const card=CARD_DEFS[id];
+  if(card.effects.unplayable){
+    addLog("『"+card.name+"』无法被打出。","l-sanity");
+    renderBattle();return;
+  }
+  if(card.cost>G.energy){
+    addLog("能量不足，无法打出『"+card.name+"』。","l-sanity");
+    renderBattle();return;
+  }
+  G.energy-=card.cost;
+  G.hand.splice(i,1);
+  G.discard.push(id);
+  addLog("你打出『"+card.name+"』。","l-sys");
+  const fx=card.effects;
+  let bonus=0;
+  if(G.charId==="edmund"&&card.type==="攻击"&&!G.firstAttackUsed){
+    bonus=3;G.firstAttackUsed=true;
+    addLog("理性推演发动：每次打击伤害 +3。","l-block");
+  }
+  if(fx.damage){
+    const hits=fx.hits||1;
+    for(let h=0;h<hits;h++){
+      dealEnemyDamage(fx.damage+bonus,"『"+card.name+"』");
+      if(G.battleOver)break;
+    }
+  }
+  if(fx.block&&!G.over){G.block+=fx.block;addLog("你获得 "+fx.block+" 点护盾。","l-block");}
+  if(fx.draw&&!G.over)drawCards(fx.draw);
+  if(fx.energyGain&&!G.over){G.energy+=fx.energyGain;addLog("你获得 "+fx.energyGain+" 点能量。","l-block");}
+  if(!G.battleOver&&!G.over){
+    if(fx.hpLoss)loseHp(fx.hpLoss);
+    if(fx.hpGain)healHp(fx.hpGain);
+    if(fx.sanityLoss)loseSanity(fx.sanityLoss);
+    if(fx.sanityGain)gainSanity(fx.sanityGain);
+  }
+  if(fx.weaken&&!G.battleOver&&!G.over){
+    G.enemyWeaken+=fx.weaken;
+    addLog(ename()+" 被削弱：下次攻击伤害 -"+fx.weaken+"。","l-sanity");
+  }
+  renderBattle();
+}
+
+function dealEnemyDamage(d,src){
+  if(G.battleOver||G.over)return;
+  const name=ENEMY_DEFS[G.enemyId].name;
+  const b=Math.min(G.enemyBlock,d);
+  G.enemyBlock-=b;
+  const rest=d-b;
+  if(b>0)addLog(name+" 的护盾抵挡了 "+b+" 点伤害。","l-block");
+  if(rest>0){
+    G.enemy.hp=Math.max(0,G.enemy.hp-rest);
+    addLog(src+" 对 "+name+" 造成 "+rest+" 点伤害。","l-dmg");
+  }
+  if(G.enemy.hp<=0){
+    G.battleOver=true;
+    addLog(name+" 溃散成滩涂上的一洼粘液。","l-heal");
+    renderBattle();
+    setTimeout(showReward,700);
+  }
+}
+
+function toggleSac(){
+  if(!G||G.over||G.battleOver||G.busy)return;
+  if(G.charId!=="seraphina"||G.sacrificed||G.hand.length===0)return;
+  G.sacMode=!G.sacMode;
+  renderBattle();
+}
+function doSacrifice(i){
+  const id=G.hand.splice(i,1)[0];
+  G.discard.push(id);
+  G.energy+=1;
+  G.sacrificed=true;G.sacMode=false;
+  addLog("禁忌祭献：弃掉『"+CARD_DEFS[id].name+"』，能量 +1。","l-sanity");
+  renderBattle();
+}
+
+function endTurn(){
+  if(!G||G.over||G.battleOver||G.busy)return;
+  for(const id of G.hand){
+    const c=CARD_DEFS[id];
+    if(c.effects.endTurnSanityLoss){
+      addLog("『"+c.name+"』在你脑中尖啸：理智 -"+c.effects.endTurnSanityLoss+"。","l-sanity");
+      loseSanity(c.effects.endTurnSanityLoss);
+      if(G.over)return;
+    }
+  }
+  G.discard.push(...G.hand);
+  G.hand=[];
+  addLog("—— 你结束了回合 ——","l-sys");
+  G.busy=true;
+  renderBattle();
+  setTimeout(()=>{
+    enemyAct();
+    G.busy=false;
+    renderBattle();
+  },550);
+}
+
+function hitPlayer(d,src){
+  const b=Math.min(G.block,d);
+  G.block-=b;
+  const rest=d-b;
+  if(b>0)addLog("你的护盾抵挡了 "+b+" 点伤害。","l-block");
+  if(rest>0)addLog(src+" 对你造成 "+rest+" 点伤害。","l-dmg");
+  else addLog(src+" 的攻击被完全格挡。","l-block");
+  if(rest>0)loseHp(rest);
+}
+function enemyHeal(n){
+  const name=ENEMY_DEFS[G.enemyId].name;
+  G.enemy.hp=Math.min(ENEMY_DEFS[G.enemyId].maxHp,G.enemy.hp+n);
+  addLog(name+" 恢复 "+n+" 点生命。","l-heal");
+}
+
+function enemyAct(){
+  if(G.over||G.battleOver)return;
+  const def=ENEMY_DEFS[G.enemyId];
+  const it=G.enemyIntent;
+  G.enemyBlock=0;
+  addLog("—— "+def.name+" 的回合 ——","l-sys");
+  if(it.block){G.enemyBlock+=it.block;addLog(def.name+" 使用『"+it.name+"』，获得 "+it.block+" 点护盾。","l-block");}
+  if(it.dmg){
+    const hits=it.hits||1;
+    for(let h=0;h<hits;h++){
+      let d=it.dmg+atkBonus();
+      if(G.enemyWeaken>0)d=Math.max(0,d-G.enemyWeaken);
+      hitPlayer(d,def.name+" 的『"+it.name+"』");
+      if(it.sanity)loseSanity(it.sanity);
+      if(G.over)return;
+    }
+  }else if(it.sanity){
+    loseSanity(it.sanity);
+    if(G.over)return;
+  }
+  if(it.heal)enemyHeal(it.heal);
+  if(def.regen)enemyHeal(def.regen);
+  G.enemyWeaken=0;
+  G.enemyIntent=pickIntent();
+  addLog(def.name+" 的下一步意图："+intentText(),"l-sys");
+  if(G.over)return;
+  G.turn++;
+  beginTurn();
+}
+
+function renderBattle(){
+  if(!G)return;
+  const def=G.def,eDef=ENEMY_DEFS[G.enemyId];
+  $("node-info").textContent="第一层 · 节点 "+(G.nodeIdx+1)+"/5 · "+(G.path[G.nodeIdx]==="boss"?"守 关 战":"战 斗");
+  $("turn-info").textContent="第 "+G.turn+" 回合";
+  $("p-name").textContent=def.name+" · "+def.title;
+  $("hp-fill").style.width=(G.hp/G.maxHp*100)+"%";
+  $("hp-text").textContent=G.hp+" / "+G.maxHp;
+  $("san-fill").style.width=(G.sanity/G.maxSanity*100)+"%";
+  $("san-text").textContent=G.sanity+" / "+G.maxSanity;
+  $("block-text").textContent=G.block>0?G.block+" 点":"—";
+  let orbs="";
+  const tot=Math.max(3,Math.min(G.energy,6));
+  for(let i=0;i<tot;i++)orbs+="<span class='orb"+(i<G.energy?" on":"")+"'></span>";
+  $("energy-orbs").innerHTML=orbs+"<span class='num'>"+G.energy+"/"+3+"</span>";
+  let bf="";
+  if(G.charId==="edmund")bf+="理性推演："+(G.firstAttackUsed?"已用":"就绪（本回合首张攻击牌 +3 伤害）")+"<br>";
+  if(G.charId==="seraphina")bf+="禁忌祭献："+(G.sacrificed?"本回合已用":"可用（弃 1 张手牌换 1 能量）")+"<br>";
+  if(G.charId==="karl")bf+="钢铁之躯：每回合开始 +4 护盾<br>";
+  $("buffs").innerHTML=bf;
+  $("e-glyph").textContent=eDef.glyph;
+  $("e-name").textContent=eDef.name;
+  $("e-tier").textContent=eDef.tier+"敌人 · HP "+eDef.maxHp;
+  $("ehp-fill").style.width=(G.enemy.hp/eDef.maxHp*100)+"%";
+  $("ehp-text").textContent=G.enemy.hp+" / "+eDef.maxHp;
+  $("eblock-text").textContent=G.enemyBlock>0?G.enemyBlock+" 点":"—";
+  $("intent").textContent="意图预告 → "+intentText();
+  $("e-mech").textContent="特殊机制："+eDef.mech;
+  $("e-buffs").innerHTML=G.enemyWeaken>0?"<span class='warn'>虚弱：下次攻击伤害 -"+G.enemyWeaken+"</span>":"";
+  const logEl=$("log");
+  logEl.innerHTML=G.log.slice(0,9).map(l=>"<div class='"+l.cls+"'>"+l.msg+"</div>").join("");
+  $("draw-count").textContent=G.draw.length;
+  $("discard-count").textContent=G.discard.length;
+  $("deck-count").textContent=G.deck.length;
+  const handEl=$("hand");handEl.innerHTML="";
+  G.hand.forEach((id,i)=>{
+    const c=CARD_DEFS[id];
+    const el=document.createElement("div");
+    el.className="card "+typeClass(c);
+    const playable=!c.effects.unplayable&&c.cost<=G.energy&&!G.busy;
+    if(!playable&&!G.sacMode)el.classList.add("unplayable");
+    if(G.sacMode)el.classList.add("sac-target");
+    el.innerHTML="<div class='cost'>"+c.cost+"</div><div class='c-name'>"+c.name+"</div><div class='c-tr'>"+c.type+" · "+c.rarity+"</div><div class='c-desc'>"+c.desc+"</div>";
+    el.title=G.sacMode?"点击祭献这张牌（弃掉并获得 1 点能量）":"点击打出这张牌";
+    el.onclick=()=>playCard(i);
+    handEl.appendChild(el);
+  });
+  const sacBtn=$("btn-sac");
+  sacBtn.style.display=G.charId==="seraphina"?"inline-block":"none";
+  if(G.charId==="seraphina"){
+    sacBtn.textContent=G.sacMode?"点击手牌祭献（取消）":(G.sacrificed?"祭献已用":"祭献 +1能量");
+    sacBtn.disabled=G.sacrificed||G.hand.length===0||G.busy;
+  }
+  $("btn-end").disabled=G.busy;
+}
+
+function rollWeighted(exclude){
+  const W={"普通":5,"罕见":4,"史诗":1};
+  const pool=REWARD_IDS.filter(id=>!exclude.includes(id));
+  let tot=0;
+  for(const id of pool)tot+=W[CARD_DEFS[id].rarity];
+  let r=Math.random()*tot;
+  for(const id of pool){r-=W[CARD_DEFS[id].rarity];if(r<0)return id;}
+  return pool[pool.length-1];
+}
+function showReward(){
+  if(!G)return;
+  const picks=[];
+  while(picks.length<3){
+    const id=rollWeighted(picks);
+    picks.push(id);
+  }
+  G.rewardPicks=picks;
+  const row=$("reward-row");row.innerHTML="";
+  picks.forEach(id=>{
+    const c=CARD_DEFS[id];
+    const el=document.createElement("div");
+    el.className="card "+typeClass(c);
+    el.innerHTML="<div class='cost'>"+c.cost+"</div><div class='c-name'>"+c.name+"</div><div class='c-tr'>"+c.type+" · "+c.rarity+"</div><div class='c-desc'>"+c.desc+"</div>";
+    el.onclick=()=>chooseReward(id);
+    row.appendChild(el);
+  });
+  showScreen("screen-reward");
+}
+function chooseReward(id){
+  if(!G||G.over)return;
+  G.deck.push(id);
+  addLog("『"+CARD_DEFS[id].name+"』已加入牌组。","l-gold");
+  nextNode();
+}
+function skipReward(){
+  if(!G||G.over)return;
+  addLog("你放弃了战利品。","l-sys");
+  nextNode();
+}
+
+function showEnd(win,reason){
+  $("end-title").textContent=win?"第 一 层 通 关":"坠 入 深 渊";
+  $("end-title").className="end-title "+(win?"win":"lose");
+  $("end-reason").textContent=reason;
+  let stats="";
+  if(G){
+    stats="结局数据 —— 角色："+G.def.name+" ｜ 生命："+G.hp+"/"+G.maxHp+" ｜ 理智："+G.sanity+"/"+G.maxSanity+" ｜ 牌组："+G.deck.length+" 张 ｜ 进度：第"+Math.min(G.nodeIdx+1,5)+"节点/共5节点";
+  }
+  $("end-stats").textContent=stats;
+  showScreen("screen-end");
+}
+</script>
+</body>
+</html>
