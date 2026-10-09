@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>深渊回响 · 暗黑克苏鲁 Roguelike 卡牌 Demo</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; user-select:none; }
+  html,body { height:100%; }
+  body {
+    background: radial-gradient(ellipse at 50% 30%, #101810 0%, #0a0f0b 45%, #060807 100%);
+    color:#b8c4ae;
+    font-family: Georgia, "Noto Serif SC", "STSong", "SimSun", serif;
+    overflow:hidden;
+  }
+  .hidden { display:none !important; }
+
+  /* ---------- 背景装饰：触手 ---------- */
+  #bg-deco { position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.55; }
+  .tentacle { transform-origin: 50% 100%; animation: sway 9s ease-in-out infinite; }
+  .tentacle.t2 { animation-duration: 13s; animation-delay:-4s; }
+  @keyframes sway { 0%,100%{ transform:rotate(-2.5deg);} 50%{ transform:rotate(2.5deg);} }
+
+  /* ---------- 眼睛 ---------- */
+  .eye-svg .eyeball { animation: eyebreathe 4s ease-in-out infinite; transform-origin:center; }
+  @keyframes eyebreathe { 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.06);} }
+  .eye-svg .iris { animation: irisshift 6s ease-in-out infinite; }
+  @keyframes irisshift { 0%,100%{ transform:translateX(-2px);} 50%{ transform:translateX(2px);} }
+
+  .rune-line { color:#4a5a48; letter-spacing:10px; font-size:13px; text-align:center; opacity:.8; }
+
+  /* ---------- 标题界面 ---------- */
+  #screen-title { position:relative; z-index:2; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:20px; }
+  .game-title { font-size:52px; letter-spacing:16px; color:#c9d6bd; text-shadow:0 0 24px #4a7a4a66, 0 0 60px #6a4a8a44; }
+  .game-sub { font-size:14px; letter-spacing:6px; color:#6a7a64; }
+  .title-rules { max-width:760px; text-align:center; font-size:12.5px; color:#7a8a72; line-height:1.9; border:1px solid #223022; padding:10px 22px; background:#0c110c99; }
+  #char-row { display:flex; gap:26px; margin-top:8px; }
+  .char-card {
+    width:240px; padding:18px 16px; cursor:pointer;
+    background:linear-gradient(160deg,#131a13 0%, #0d100f 70%);
+    border:1px solid #2a3a2a; position:relative;
+    transition: all .25s ease;
+  }
+  .char-card:hover { border-color:#6a4a8a; box-shadow:0 0 24px #6a4a8a44, inset 0 0 30px #6a4a8a11; transform:translateY(-4px); }
+  .char-card h3 { font-size:20px; color:#c9d6bd; letter-spacing:3px; text-align:center; }
+  .char-card .c-title { text-align:center; font-size:12px; color:#9b7ec8; letter-spacing:2px; margin:2px 0 10px; }
+  .char-card .c-bg { font-size:12px; color:#8a9a82; line-height:1.8; min-height:78px; border-top:1px dashed #2a3a2a; border-bottom:1px dashed #2a3a2a; padding:8px 2px; margin-bottom:8px; }
+  .char-card .c-mech { font-size:12px; color:#6fae6f; line-height:1.7; margin-bottom:6px; }
+  .char-card .c-style { font-size:12px; color:#7a8a72; line-height:1.7; margin-bottom:10px; }
+  .char-card .c-stats { display:flex; justify-content:space-between; font-size:12.5px; }
+  .char-card .hp-v { color:#a8564a; } .char-card .san-v { color:#9b7ec8; }
+
+  /* ---------- 游戏主界面 ---------- */
+  #screen-game { position:relative; z-index:2; height:100%; display:flex; flex-direction:column; }
+  #hud { display:flex; align-items:center; gap:14px; padding:8px 16px; background:linear-gradient(#0d130e, #0a0e0a); border-bottom:1px solid #223022; flex-wrap:wrap; }
+  .hud-char { font-size:15px; color:#c9d6bd; letter-spacing:2px; min-width:180px; display:flex; align-items:center; }
+  .bar-wrap { width:190px; }
+  .bar-label { font-size:11px; color:#8a9a82; display:flex; justify-content:space-between; margin-bottom:2px; }
+  .bar { height:12px; background:#0a0d0a; border:1px solid #2a3a2a; position:relative; overflow:hidden; }
+  .bar .fill { height:100%; transition:width .3s ease; }
+  .fill.hp-f { background:linear-gradient(90deg,#5a2620,#a8564a); }
+  .fill.san-f { background:linear-gradient(90deg,#3a2650,#9b7ec8); }
+  .chip { font-size:12px; padding:3px 9px; border:1px solid #2a3a2a; background:#0c110c; color:#b8c4ae; }
+  .chip.block-chip { color:#7ab0d9; border-color:#2a4a5a; }
+  .energy-box { display:flex; gap:5px; align-items:center; }
+  .energy-pip { width:16px; height:16px; transform:rotate(45deg); border:1px solid #4a5a48; background:#0a0d0a; }
+  .energy-pip.on { background:#9b7ec8; border-color:#b89ae0; box-shadow:0 0 8px #9b7ec888; }
+  .energy-num { color:#b89ae0; font-size:14px; margin-left:4px; }
+  #node-track { display:flex; gap:10px; align-items:center; margin-left:auto; }
+  .node-dot { display:flex; flex-direction:column; align-items:center; font-size:10.5px; color:#5a6a55; }
+  .node-dot .d { width:12px; height:12px; border-radius:50%; border:1px solid #3a4a3a; background:#0a0d0a; margin-bottom:3px; }
+  .node-dot.done .d { background:#3a5a3a; }
+  .node-dot.cur .d { background:#9b7ec8; box-shadow:0 0 10px #9b7ec8; }
+  .node-dot.cur { color:#b89ae0; }
+  #turn-info { font-size:12px; color:#8a9a82; }
+
+  #main-area { flex:1; display:flex; min-height:0; }
+  #battlefield { flex:1; display:flex; flex-direction:column; min-width:0; }
+  #enemy-zone { flex:1; display:flex; align-items:center; justify-content:center; gap:34px; padding:12px; position:relative; }
+  #intent-banner { position:absolute; top:6px; left:50%; transform:translateX(-50%); font-size:12px; color:#8a6ab0; letter-spacing:2px; }
+
+  .enemy-card {
+    width:210px; padding:12px; text-align:center; cursor:default;
+    background:linear-gradient(165deg,#141018 0%, #0c0a10 75%);
+    border:1px solid #3a2a4a; position:relative;
+  }
+  .enemy-card.dead { opacity:.15; filter:grayscale(1); }
+  .enemy-card.targetable { cursor:pointer; border-color:#a8564a; box-shadow:0 0 18px #a8564a66; animation:targetPulse 1s ease-in-out infinite; }
+  @keyframes targetPulse { 0%,100%{ box-shadow:0 0 10px #a8564a44;} 50%{ box-shadow:0 0 22px #a8564a99;} }
+  .enemy-card .e-name { font-size:16px; color:#d0c4dc; letter-spacing:2px; }
+  .enemy-card .e-tier { font-size:10.5px; padding:1px 6px; border:1px solid #4a3a5a; color:#9b7ec8; margin-left:6px; vertical-align:2px; }
+  .enemy-card .e-mech { font-size:11px; color:#6a7a64; margin-top:5px; line-height:1.6; min-height:32px; }
+  .enemy-card .e-hpbar { margin-top:7px; }
+  .enemy-card .e-block { font-size:11.5px; color:#7ab0d9; margin-top:4px; min-height:15px; }
+  .enemy-card .e-intent { margin-top:8px; border-top:1px dashed #3a2a4a; padding-top:7px; font-size:13px; min-height:44px; }
+  .intent-tag { display:inline-block; padding:2px 8px; border:1px solid; margin:1px 2px; font-size:12.5px; letter-spacing:1px; }
+  .it-atk { color:#d98880; border-color:#7a3a30; }
+  .it-san { color:#b89ae0; border-color:#5a3a7a; }
+  .it-blk { color:#8ab8d9; border-color:#3a5a7a; }
+  .it-buff { color:#d9b070; border-color:#7a5a2a; }
+  .it-heal { color:#8ad9a8; border-color:#3a7a5a; }
+  .it-curse { color:#c88ad9; border-color:#6a3a7a; }
+  .it-desc { font-size:10.5px; color:#6a7a64; margin-top:4px; }
+
+  #log-panel { width:250px; border-left:1px solid #223022; background:#0a0e0acc; padding:8px 10px; display:flex; flex-direction:column; }
+  #log-panel h4 { font-size:12px; color:#6a7a64; letter-spacing:3px; margin-bottom:6px; }
+  #log-list { flex:1; overflow-y:auto; font-size:11.5px; line-height:1.75; color:#8a9a82; }
+  #log-list .l-hl { color:#c9d6bd; } #log-list .l-bad { color:#d98880; } #log-list .l-mad { color:#b89ae0; } #log-list .l-good { color:#8ad9a8; }
+
+  #bottom-bar { display:flex; align-items:center; justify-content:center; padding:10px 16px 14px; position:relative; border-top:1px solid #1a241a; background:#090c09; }
+  #end-turn-btn {
+    position:absolute; right:26px; top:50%; transform:translateY(-50%);
+    padding:10px 22px; font-size:15px; letter-spacing:4px; cursor:pointer;
+    color:#c9d6bd; background:linear-gradient(#1a2a1a,#101a10); border:1px solid #3a5a3a;
+    font-family:inherit;
+  }
+  #end-turn-btn:hover { border-color:#6fae6f; box-shadow:0 0 14px #4a7a4a66; }
+  #hand-area { display:flex; gap:10px; }
+  .card {
+    width:148px; height:196px; padding:9px 9px 7px; cursor:pointer; position:relative;
+    background:linear-gradient(170deg,#161d16 0%, #0e120d 80%);
+    border:1px solid #3a4a3a; display:flex; flex-direction:column;
+    transition:transform .15s ease, box-shadow .15s ease;
+  }
+  .card:hover { transform:translateY(-12px); box-shadow:0 6px 20px #00000088; }
+  .card.disabled { opacity:.45; cursor:not-allowed; }
+  .card.disabled:hover { transform:none; }
+  .card.t-攻击 { border-color:#6a3a30; } .card.t-攻击 .card-cost { border-color:#a8564a; color:#d98880; }
+  .card.t-防御 { border-color:#3a5a6a; } .card.t-防御 .card-cost { border-color:#7ab0d9; color:#8ab8d9; }
+  .card.t-技能 { border-color:#3a6a5a; } .card.t-技能 .card-cost { border-color:#6fae6f; color:#8ad9a8; }
+  .card.t-疯狂 { border-color:#5a3a6a; background:linear-gradient(170deg,#1a1420 0%, #100c14 80%); } .card.t-疯狂 .card-cost { border-color:#b89ae0; color:#b89ae0; }
+  .card-head { display:flex; align-items:center; gap:7px; }
+  .card-cost { width:24px; height:24px; border-radius:50%; border:1.5px solid; display:flex; align-items:center; justify-content:center; font-size:14px; flex:none; background:#0a0d0a; }
+  .card-name { font-size:13.5px; color:#d0d8c8; letter-spacing:1px; line-height:1.25; }
+  .card-meta { font-size:10px; margin-top:4px; color:#6a7a64; letter-spacing:1px; }
+  .r-起始 { color:#7a8a72; } .r-普通 { color:#9aa89a; } .r-稀有 { color:#6faed9; } .r-史诗 { color:#c89a4a; } .r-诅咒 { color:#c88ad9; }
+  .card-desc { font-size:11.5px; line-height:1.65; color:#a8b4a0; margin-top:8px; flex:1; }
+  .card-foot { text-align:center; font-size:10px; color:#4a5a48; letter-spacing:6px; }
+  #deck-counts { position:absolute; left:20px; bottom:12px; font-size:11.5px; color:#6a7a64; }
+  #cancel-target { position:absolute; left:50%; transform:translateX(-50%); top:-34px; font-size:12.5px; color:#d98880; letter-spacing:2px; }
+  #cancel-target button { margin-left:10px; background:none; border:1px solid #7a3a30; color:#d98880; cursor:pointer; font-family:inherit; font-size:12px; padding:2px 10px; }
+
+  /* ---------- 弹窗 ---------- */
+  #modal-layer { position:fixed; inset:0; z-index:10; background:#04060466; backdrop-filter:blur(3px); display:flex; align-items:center; justify-content:center; }
+  .modal {
+    max-width:680px; width:92%; max-height:88vh; overflow-y:auto;
+    background:linear-gradient(165deg,#12180f 0%, #0c0e12 100%);
+    border:1px solid #3a4a3a; box-shadow:0 0 50px #000000cc, inset 0 0 60px #6a4a8a0d;
+    padding:26px 30px; text-align:center;
+  }
+  .modal h2 { font-size:24px; letter-spacing:6px; color:#c9d6bd; margin-bottom:6px; }
+  .modal .m-sub { font-size:12px; color:#6a7a64; letter-spacing:3px; margin-bottom:14px; }
+  .modal .m-desc { font-size:13.5px; color:#a8b4a0; line-height:2; text-align:left; margin:0 auto 18px; max-width:560px; }
+  .modal .m-result { font-size:13.5px; color:#8ad9a8; line-height:2; margin-bottom:16px; }
+  .opt-btn {
+    display:block; width:100%; text-align:left; margin:8px 0; padding:11px 14px; cursor:pointer;
+    background:#0e130e; border:1px solid #2a3a2a; color:#b8c4ae; font-family:inherit; font-size:13.5px; line-height:1.7;
+  }
+  .opt-btn:hover { border-color:#6a4a8a; box-shadow:0 0 12px #6a4a8a33; }
+  .opt-btn .o-label { color:#c9d6bd; letter-spacing:2px; }
+  .opt-btn .o-desc { font-size:12px; color:#7a8a72; }
+  .reward-row { display:flex; gap:14px; justify-content:center; flex-wrap:wrap; margin:14px 0; }
+  .reward-row .card { cursor:pointer; }
+  .reward-row .card:hover { border-color:#c89a4a; box-shadow:0 0 18px #c89a4a44; }
+  .skip-btn, .restart-btn {
+    margin-top:8px; padding:9px 26px; background:none; border:1px solid #3a4a3a; color:#8a9a82;
+    cursor:pointer; font-family:inherit; font-size:13.5px; letter-spacing:3px;
+  }
+  .skip-btn:hover, .restart-btn:hover { border-color:#6a7a64; color:#c9d6bd; }
+  .big-verdict { font-size:34px; letter-spacing:10px; margin:10px 0 4px; }
+  .verdict-lose { color:#a8564a; text-shadow:0 0 24px #a8564a66; }
+  .verdict-win { color:#8ad9a8; text-shadow:0 0 24px #4a7a4a66; }
+
+  ::-webkit-scrollbar { width:8px; } ::-webkit-scrollbar-thumb { background:#2a3a2a; } ::-webkit-scrollbar-track { background:#0a0d0a; }
+</style>
+</head>
+<body>
+
+<!-- 背景触手装饰 -->
+<svg id="bg-deco" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="tg" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#1a2f1a"/><stop offset="1" stop-color="#2a1a3a" stop-opacity=".25"/>
+    </linearGradient>
+  </defs>
+  <g class="tentacle" opacity=".16">
+    <path d="M-40,920 C120,760 40,640 220,560 C360,500 300,400 430,380 C520,366 540,430 480,450 C420,470 430,520 340,570 C220,640 320,760 160,900 Z" fill="url(#tg)"/>
+    <path d="M1500,920 C1420,740 1520,660 1380,590 C1270,536 1330,450 1230,430 C1160,417 1140,470 1190,488 C1240,506 1220,560 1300,610 C1410,678 1330,780 1460,900 Z" fill="url(#tg)"/>
+  </g>
+  <g class="tentacle t2" opacity=".1">
+    <path d="M500,920 C560,800 480,760 560,700 C620,656 700,680 680,720 C660,760 600,750 620,800 C640,850 600,880 640,920 Z" fill="url(#tg)"/>
+    <path d="M1050,920 C1000,810 1080,770 1010,710 C960,666 890,690 910,730 C930,770 990,760 970,810 C950,860 990,880 950,920 Z" fill="url(#tg)"/>
+  </g>
+</svg>
+
+<div id="screen-title"></div>
+
+<div id="screen-game" class="hidden">
+  <div id="hud"></div>
+  <div id="main-area">
+    <div id="battlefield">
+      <div id="enemy-zone"></div>
+      <div id="bottom-bar">
+        <div id="deck-counts"></div>
+        <div id="cancel-target" class="hidden">打出这张牌需要选择目标 <button onclick="cancelTarget()">取消</button></div>
+        <div id="hand-area"></div>
+        <button id="end-turn-btn" onclick="onEndTurn()">结束回合</button>
+      </div>
+    </div>
+    <div id="log-panel"><h4>调查记录</h4><div id="log-list"></div></div>
+  </div>
+</div>
+
+<div id="modal-layer" class="hidden"></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   深渊回响 —— 暗黑克苏鲁 Roguelike 卡牌构建 Demo（第一层可玩）
+   规则：3能量/回合，抽5张牌，HP与理智任一归零即败，牌组只增不减，
+        节点顺序固定：事件→战斗→事件→战斗→守关战
+===================================================================== */
+
+/* ---------------- 卡牌数据库 ---------------- */
+const CARD_DB = {
+  /* 调查员起始 */
+  revolver:    {name:'检察官的左轮', cost:1, type:'攻击', rarity:'起始', description:'造成6点伤害。', effects:{damage:6}},
+  silver:      {name:'银质子弹',     cost:2, type:'攻击', rarity:'起始', description:'造成10点伤害。', effects:{damage:10}},
+  decisive:    {name:'致命一击',     cost:2, type:'攻击', rarity:'起始', description:'造成8点伤害；若目标没有护盾，额外造成4点伤害。', effects:{damage:8, bonusNoBlock:4}},
+  instinct:    {name:'猎手直觉',     cost:1, type:'攻击', rarity:'起始', description:'造成4点伤害，抽1张牌。', effects:{damage:4, draw:1}},
+  allout:      {name:'全力搏杀',     cost:3, type:'攻击', rarity:'起始', description:'造成18点伤害。', effects:{damage:18}},
+  guard_basic: {name:'稳健防御',     cost:1, type:'防御', rarity:'起始', description:'获得6点护盾。', effects:{block:6}},
+  roll:        {name:'战术翻滚',     cost:1, type:'防御', rarity:'起始', description:'获得5点护盾，抽1张牌。', effects:{block:5, draw:1}},
+  survey:      {name:'现场勘验',     cost:0, type:'技能', rarity:'起始', description:'抽1张牌。', effects:{draw:1}},
+  reasoning:   {name:'推理链',       cost:1, type:'技能', rarity:'起始', description:'抽2张牌。', effects:{draw:2}},
+  ironwill:    {name:'钢铁意志',     cost:1, type:'技能', rarity:'起始', description:'恢复6点理智。', effects:{sanityGain:6}},
+  /* 疯狂诗人起始 */
+  bloodscript:   {name:'血色手稿',   cost:1, type:'攻击', rarity:'起始', description:'失去2点生命，造成9点伤害。', effects:{selfHp:2, damage:9}},
+  sacrificial:   {name:'献祭之刃',   cost:2, type:'攻击', rarity:'起始', description:'失去4点理智，造成16点伤害。', effects:{selfSanity:4, damage:16}},
+  burningverse:  {name:'燃烧诗篇',   cost:1, type:'疯狂', rarity:'起始', description:'失去3点理智，对所有敌人造成8点伤害。', effects:{selfSanity:3, damageAll:8}},
+  echo:          {name:'疯狂回响',   cost:1, type:'疯狂', rarity:'起始', description:'失去3点理智，造成8点伤害，抽1张牌。', effects:{selfSanity:3, damage:8, draw:1}},
+  forbiddenhymn: {name:'禁忌颂歌',   cost:3, type:'疯狂', rarity:'起始', description:'失去5点理智，对所有敌人造成14点伤害。', effects:{selfSanity:5, damageAll:14}},
+  murmur:        {name:'呢喃低语',   cost:0, type:'疯狂', rarity:'起始', description:'失去2点理智，抽2张牌。', effects:{selfSanity:2, draw:2}},
+  tremor:        {name:'颤栗韵脚',   cost:1, type:'防御', rarity:'起始', description:'获得7点护盾。', effects:{block:7}},
+  brokenheart:   {name:'破碎之心',   cost:1, type:'防御', rarity:'起始', description:'获得6点护盾，恢复3点理智。', effects:{block:6, sanityGain:3}},
+  surge:         {name:'灵感狂潮',   cost:2, type:'技能', rarity:'起始', description:'抽3张牌，获得1点能量。', effects:{draw:3, energy:1}},
+  abyssgaze:     {name:'深渊凝视',   cost:2, type:'技能', rarity:'起始', description:'恢复8点理智，抽1张牌。', effects:{sanityGain:8, draw:1}},
+  /* 掘墓人起始 */
+  vanguard:    {name:'沉重先驱',     cost:1, type:'攻击', rarity:'起始', description:'造成5点伤害，获得3点护盾。', effects:{damage:5, block:3}},
+  shovel:      {name:'铁锹重击',     cost:2, type:'攻击', rarity:'起始', description:'造成11点伤害。', effects:{damage:11}},
+  bonebreak:   {name:'断骨一击',     cost:2, type:'攻击', rarity:'起始', description:'造成12点伤害。', effects:{damage:12}},
+  pitfall:     {name:'拖入深坑',     cost:2, type:'攻击', rarity:'起始', description:'造成7点伤害，获得5点护盾。', effects:{damage:7, block:5}},
+  finalblow:   {name:'一锹封喉',     cost:3, type:'攻击', rarity:'起始', description:'造成20点伤害。', effects:{damage:20}},
+  barrow:      {name:'坟土壁垒',     cost:1, type:'防御', rarity:'起始', description:'获得9点护盾。', effects:{block:9}},
+  dig:         {name:'掘墓',         cost:1, type:'防御', rarity:'起始', description:'获得6点护盾，抽1张牌。', effects:{block:6, draw:1}},
+  nightwatch:  {name:'长夜坚守',     cost:2, type:'防御', rarity:'起始', description:'获得14点护盾。', effects:{block:14}},
+  deathwhisper:{name:'亡者低语',     cost:1, type:'技能', rarity:'起始', description:'恢复6点理智。', effects:{sanityGain:6}},
+  corpsewax:   {name:'尸蜡皮肤',     cost:2, type:'技能', rarity:'起始', description:'获得12点护盾，恢复4点理智。', effects:{block:12, sanityGain:4}},
+  /* 诅咒疯牌（事件/敌人注入） */
+  whisper_curse:{name:'蚀心低语',    cost:0, type:'疯狂', rarity:'诅咒', description:'失去4点理智，抽1张牌。', effects:{selfSanity:4, draw:1}},
+  /* 奖励池：普通 */
+  rend:        {name:'撕裂爪痕',     cost:1, type:'攻击', rarity:'普通', description:'造成8点伤害。', effects:{damage:8}},
+  hammer:      {name:'重锤',         cost:2, type:'攻击', rarity:'普通', description:'造成12点伤害。', effects:{damage:12}},
+  boneshield:  {name:'骨盾',         cost:1, type:'防御', rarity:'普通', description:'获得6点护盾，抽1张牌。', effects:{block:6, draw:1}},
+  runecharm:   {name:'符文护符',     cost:1, type:'防御', rarity:'普通', description:'获得8点护盾。', effects:{block:8}},
+  quickstep:   {name:'迅捷步伐',     cost:0, type:'技能', rarity:'普通', description:'抽1张牌。', effects:{draw:1}},
+  /* 奖励池：稀有 */
+  bloodpact:   {name:'血之契约',     cost:1, type:'攻击', rarity:'稀有', description:'失去4点生命，造成14点伤害。', effects:{selfHp:4, damage:14}},
+  slaughter:   {name:'屠戮',         cost:2, type:'攻击', rarity:'稀有', description:'对所有敌人造成11点伤害。', effects:{damageAll:11}},
+  stoneskin:   {name:'石肤术',       cost:2, type:'防御', rarity:'稀有', description:'获得16点护盾。', effects:{block:16}},
+  mindbarrier: {name:'心灵屏障',     cost:2, type:'防御', rarity:'稀有', description:'获得10点护盾，恢复4点理智。', effects:{block:10, sanityGain:4}},
+  exorcism:    {name:'驱邪圣言',     cost:1, type:'技能', rarity:'稀有', description:'恢复10点理智。', effects:{sanityGain:10}},
+  foresight:   {name:'预知幻象',     cost:1, type:'技能', rarity:'稀有', description:'抽2张牌，获得1点能量。', effects:{draw:2, energy:1}},
+  /* 奖励池：史诗 */
+  wrath:       {name:'旧日支配者之怒', cost:3, type:'攻击', rarity:'史诗', description:'造成24点伤害。', effects:{damage:24}},
+  staralign:   {name:'群星归位',     cost:3, type:'攻击', rarity:'史诗', description:'对所有敌人造成18点伤害。', effects:{damageAll:18}},
+  embrace:     {name:'克苏鲁的拥抱', cost:2, type:'疯狂', rarity:'史诗', description:'失去6点理智，造成10点伤害并获得20点护盾。', effects:{selfSanity:6, damage:10, block:20}},
+  iridescence: {name:'星之彩',       cost:3, type:'技能', rarity:'史诗', description:'恢复8点理智，抽3张牌，获得2点能量。', effects:{sanityGain:8, draw:3, energy:2}}
+};
+
+const STARTER_DECKS = {
+  investigator: ['revolver','silver','decisive','instinct','allout','guard_basic','roll','survey','reasoning','ironwill'],
+  poet:         ['bloodscript','sacrificial','burningverse','echo','forbiddenhymn','murmur','tremor','brokenheart','surge','abyssgaze'],
+  gravedigger:  ['vanguard','shovel','bonebreak','pitfall','finalblow','barrow','dig','nightwatch','deathwhisper','corpsewax']
+};
+
+const POOL = {
+  normal: ['rend','hammer','boneshield','runecharm','quickstep'],
+  rare:   ['bloodpact','slaughter','stoneskin','mindbarrier','exorcism','foresight'],
+  epic:   ['wrath','staralign','embrace','iridescence']
+};
+
+/* ---------------- 角色数据库 ---------------- */
+const CHARACTERS = {
+  investigator: {
+    key:'investigator', name:'亚瑟·霍尔库姆', title:'调查员',
+    bg:'阿卡姆警局的停职侦探。追查失踪案卷宗时，他看见了不该看见的东西——从此档案夹里多了许多只有他读得到的批注。',
+    mech:'洞察：每回合你打出的第一张攻击牌伤害 +3。',
+    style:'攻防均衡，稳健推进，靠增幅的连续普攻与过牌压制敌人。',
+    hp:72, san:60
+  },
+  poet: {
+    key:'poet', name:'塞拉斯·克罗', title:'疯狂诗人',
+    bg:'曾是文坛新星，如今要灌下苦艾酒才能记起诗句。可怕的是——诗句也开始记起他，并在深夜替他落笔。',
+    mech:'痛苦灵感：每当你的理智降低时，抽1张牌（每回合最多触发2次）。',
+    style:'燃烧理智换取爆发输出与海量过牌，在疯狂边缘起舞。',
+    hp:60, san:78
+  },
+  gravedigger: {
+    key:'gravedigger', name:'格雷戈尔·莫恩', title:'掘墓人',
+    bg:'恸哭教堂的掘墓人，埋过的尸体比认识的活人还多。坟里的东西偶尔会跟他搭话，他都礼貌地回一句"晚上好"。',
+    mech:'亡者之躯：每回合开始时获得4点护盾。',
+    style:'高血量厚护盾的阵地战，靠消耗与重击把敌人拖进坟墓。',
+    hp:84, san:52
+  }
+};
+
+/* ---------------- 敌人数据库 ---------------- */
+const INTENTS = {
+  bite:  {label:'撕咬', cls:'it-atk', dmg:7, desc:'造成7点伤害'},
+  pounce:{label:'猛扑', cls:'it-atk', dmg:10, desc:'造成10点伤害'},
+  shriek:{label:'尖啸', cls:'it-san', san:3, desc:'造成3点理智伤害'},
+  coil:  {label:'蜷缩', cls:'it-blk', blk:8, desc:'获得8点护盾'},
+  wrap:  {label:'缠绕', cls:'it-atk', dmg:4, san:3, desc:'造成4点伤害和3点理智伤害'},
+  spit:  {label:'酸液喷吐', cls:'it-atk', dmg:9, desc:'造成9点伤害'},
+  chant: {label:'疯狂咏唱', cls:'it-buff', buff:4, desc:'下一次攻击伤害 +4'},
+  dagger:{label:'仪式匕首', cls:'it-atk', dmg:6, desc:'造成6点伤害'},
+  blood: {label:'血祭', cls:'it-atk', dmg:4, san:2, desc:'造成4点伤害和2点理智伤害'},
+  dclaw: {label:'爪击', cls:'it-atk', dmg:8, desc:'造成8点伤害'},
+  tail:  {label:'尾扫', cls:'it-atk', dmg:5, desc:'造成5点伤害'},
+  cold:  {label:'寒潮', cls:'it-atk', dmg:6, san:4, desc:'造成6点伤害和4点理智伤害'},
+  wclaw: {label:'寒爪', cls:'it-atk', dmg:7, desc:'造成7点伤害'},
+  swhisper:{label:'恐怖低语', cls:'it-san', san:6, desc:'造成6点理智伤害'},
+  devour:{label:'魂噬', cls:'it-atk', dmg:4, san:4, desc:'造成4点伤害和4点理智伤害'},
+  fire:  {label:'献祭之火', cls:'it-atk', dmg:11, desc:'造成11点伤害（生命低于一半时为14点）'},
+  bless: {label:'黑暗祝福', cls:'it-heal', blk:10, heal:5, desc:'获得10点护盾并恢复5点生命'},
+  hcurse:{label:'疯狂诅咒', cls:'it-curse', san:5, curse:true, desc:'造成5点理智伤害，并将1张「蚀心低语」混入你的弃牌堆'},
+  whip:  {label:'触手鞭击', cls:'it-atk', dmg:13, desc:'造成13点伤害'},
+  gaze:  {label:'催眠凝视', cls:'it-atk', dmg:6, san:6, desc:'造成6点伤害和6点理智伤害'},
+  glare: {label:'眩光', cls:'it-blk', blk:12, desc:'获得12点护盾'},
+  wave:  {label:'疯癫波', cls:'it-san', san:8, desc:'造成8点理智伤害'},
+  mad:   {label:'癫狂凝视', cls:'it-atk', dmg:10, san:10, desc:'每3次行动释放：造成10点伤害和10点理智伤害'}
+};
+
+const ENEMY_DB = {
+  ghoul:   {key:'ghoul',   name:'食尸鬼',     tier:'普通', hp:24, mech:'狂乱：生命 ≤12 时不再撕咬，只会猛扑或尖啸。'},
+  crawler: {key:'crawler', name:'触手爬虫',   tier:'普通', hp:20, mech:'黏液再生：每次行动后恢复2点生命。'},
+  cultist: {key:'cultist', name:'教团信徒',   tier:'普通', hp:22, mech:'狂热：疯狂咏唱后，下一次攻击伤害 +4。'},
+  deepone: {key:'deepone', name:'深潜者新兵', tier:'普通', hp:28, mech:'深寒：每第3次行动必定释放寒潮。'},
+  wraith:  {key:'wraith',  name:'缚灵',       tier:'强',   hp:26, mech:'虚体：战斗开始时获得6点护盾。'},
+  priest:  {key:'priest',  name:'邪教执祭',   tier:'精英', hp:45, mech:'渎神仪式：生命低于一半时，献祭之火造成14点伤害。'},
+  boss:    {key:'boss',    name:'看守者·巨眼', tier:'守关', hp:60, mech:'全视之眼：每第3次行动释放癫狂凝视（10伤害+10理智伤害）。'}
+};
+
+function computeIntent(en){
+  const mk = id => Object.assign({id}, INTENTS[id]);
+  switch(en.key){
+    case 'ghoul': {
+      let id = ['bite','pounce','shriek'][en.moveCount % 3];
+      if(id === 'bite' && en.hp <= 12) id = 'pounce';
+      return mk(id);
+    }
+    case 'crawler': return mk(['wrap','spit','coil'][en.moveCount % 3]);
+    case 'cultist': return mk(['chant','dagger','blood','dagger'][en.moveCount % 4]);
+    case 'deepone': return mk(['dclaw','tail','cold'][en.moveCount % 3]);
+    case 'wraith':  return mk(['wclaw','swhisper','devour'][en.moveCount % 3]);
+    case 'priest': {
+      const it = mk(['fire','bless','hcurse','fire'][en.moveCount % 4]);
+      if(it.id === 'fire' && en.hp < en.maxHp * 0.5) it.dmg = 14;
+      return it;
+    }
+    case 'boss': {
+      if((en.moveCount + 1) % 3 === 0) return mk('mad');
+      return mk(['whip','gaze','glare','wave'][en.moveCount % 4]);
+    }
+  }
+}
+
+/* ---------------- 事件数据库 ---------------- */
+const EVENTS = [
+  { key:'altar', title:'血迹斑斑的祭坛',
+    desc:'黑曜石祭坛矗立在地下室中央，沟槽里凝着暗红的血痂。某种低语顺着你的脊椎向上爬，催促你把手放上去。',
+    options:[
+      {label:'以血献祭', desc:'失去8点生命，从3张稀有牌中选择1张加入牌组', hp:-8, reward:'rare3',
+       result:'你割开手掌按上祭坛。低语满意地退去，一段陌生的知识烙进了你的脑海。'},
+      {label:'捣毁祭坛', desc:'恢复10点理智', san:10,
+       result:'祭坛崩裂的瞬间，低语化作了无奈的叹息。你的思绪前所未有地清明。'},
+      {label:'悄然离开', desc:'无事发生', result:'你贴着墙根退出了地下室。有些东西，不看比看更安全。'}
+    ]},
+  { key:'shelf', title:'布满符文的书架',
+    desc:'半塌宅邸的书房里，一本《死灵之书》残卷摊在书架上，纸页无风自动。书脊上的符文随你的心跳明灭。',
+    options:[
+      {label:'诵读残卷', desc:'失去10点理智，从3张稀有牌中选择1张加入牌组', san:-10, reward:'rare3',
+       result:'你读出了那些蠕动的音节。代价是记忆里有一角永远变成了黑色，但你学会了新的秘术。'},
+      {label:'撕下一页', desc:'失去4点理智，获得1张随机普通牌', san:-4, reward:'randomNormal',
+       result:'你抢下一页塞进口袋。纸张在口袋里微微搏动，像一颗小小的心脏。'},
+      {label:'无视离开', desc:'无事发生', result:'你捂住耳朵快步穿过书房。身后的书页声渐渐平息。'}
+    ]},
+  { key:'well', title:'井中低语',
+    desc:'庭院中央有一口枯井。井底传来潮湿的低语，念着你七岁那年溺死的猫的名字。',
+    options:[
+      {label:'聆听低语', desc:'50%概率恢复15点理智，50%概率失去10点理智', gamble:true,
+       result:'', resultGood:'低语竟是温柔的摇篮曲。你感到某种庞大的存在替你抚平了焦虑。', resultBad:'低语突然变成千万声尖叫。你捂着太阳穴踉跄后退。'},
+      {label:'投下银币', desc:'恢复8点生命', hp:8,
+       result:'银币坠入黑暗。一股暖流顺着井沿爬上你的手臂，伤口以肉眼可见的速度愈合。'},
+      {label:'封堵井口', desc:'无事发生', result:'你搬来石板盖住井口。低语被闷在了地下，像隔了一层厚玻璃。'}
+    ]},
+  { key:'pilgrim', title:'露营的朝圣者',
+    desc:'篝火旁坐着一个裹着破烂长袍的朝圣者，兜帽下只有一片浓稠的黑暗。他朝你招了招手，火堆上烤着散发着香气的东西。',
+    options:[
+      {label:'交换故事', desc:'恢复10点理智', san:10,
+       result:'你们聊了一整夜。他的故事荒诞又慈祥。天亮时篝火已灭，他却像从未存在过——但你的心轻松了许多。'},
+      {label:'抢夺补给', desc:'恢复12点生命，将1张「蚀心低语」加入牌组', hp:12, reward:'curse',
+       result:'你抢过食物狼吞虎咽。朝圣者无声地笑了。之后每当你闭上眼，都能听见那声笑。'},
+      {label:'继续赶路', desc:'无事发生', result:'你绕开篝火快步离开。那股香气追了你半里地才散去。'}
+    ]},
+  { key:'statue', title:'无面雕像',
+    desc:'走廊尽头立着一尊无面石像。本该是脸的地方光滑如卵，但你凑近时，卵面上缓缓浮出了你自己的五官。',
+    options:[
+      {label:'触碰面孔', desc:'失去6点生命，恢复8点理智', hp:-6, san:8,
+       result:'指尖传来石头的脉搏。你的面孔被吸进卵面，随即又被温和地推了回来——带着某种释然。'},
+      {label:'献上鲜血', desc:'失去10点生命，从3张稀有牌中选择1张加入牌组', hp:-10, reward:'rare3',
+       result:'血珠渗入石像。卵面上你的五官咧开一个不属于你的微笑，随后一个古老的名词在你脑中成形。'},
+      {label:'低头绕开', desc:'无事发生', result:'你盯着自己的鞋尖走过去。卵面上的目光一直贴着你的后颈，直到你拐过墙角。'}
+    ]}
+];
+
+const NODES = ['event','battle','event','battle','guard'];
+const NODE_LABELS = ['事件','战斗','事件','战斗','守关'];
+
+/* ---------------- 全局状态 ---------------- */
+let uidCounter = 1;
+const S = {
+  phase:'title', charKey:null, nodeIndex:0, usedEvents:[],
+  player:null, battle:null, pendingCard:null, pendingEvent:null, rewardCtx:null, rewardCards:[]
+};
+
+function $id(x){ return document.getElementById(x); }
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+function randFrom(a){ return a[Math.floor(Math.random()*a.length)]; }
+function newCard(key){ return {uid:uidCounter++, key}; }
+function P(){ return S.player; }
+
+/* ---------------- 日志 ---------------- */
+const LOGS = [];
+function log(msg, cls){
+  LOGS.push({msg:msg, cls:cls||''});
+  if(LOGS.length > 60) LOGS.shift();
+  renderLog();
+}
+function renderLog(){
+  $id('log-list').innerHTML = LOGS.map(function(l){ return '<div class="'+l.cls+'">'+l.msg+'</div>'; }).join('');
+  const el = $id('log-list'); el.scrollTop = el.scrollHeight;
+}
+
+/* ---------------- 标题界面 ---------------- */
+function eyeSvg(size){
+  return '<svg class="eye-svg" width="'+size+'" height="'+(size*0.6)+'" viewBox="0 0 100 60">'+
+    '<path class="eyeball" d="M5,30 Q50,-8 95,30 Q50,66 5,30 Z" fill="#0d1410" stroke="#4a7a4a" stroke-width="1.5"/>'+
+    '<circle class="iris" cx="50" cy="30" r="15" fill="#2a1a3a" stroke="#9b7ec8" stroke-width="1"/>'+
+    '<circle cx="50" cy="30" r="6" fill="#050705"/>'+
+    '<circle cx="54" cy="26" r="2" fill="#b89ae0" opacity=".8"/>'+
+    '</svg>';
+}
+function renderTitle(){
+  $id('screen-title').classList.remove('hidden');
+  $id('screen-game').classList.add('hidden');
+  $id('modal-layer').classList.add('hidden');
+  const chars = Object.keys(CHARACTERS).map(function(k){
+    const c = CHARACTERS[k];
+    return '<div class="char-card" onclick="chooseChar(\''+c.key+'\')">'+
+      '<h3>'+c.title+'</h3><div class="c-title">'+c.name+'</div>'+
+      '<div class="c-bg">'+c.bg+'</div>'+
+      '<div class="c-mech">'+c.mech+'</div>'+
+      '<div class="c-style">'+c.style+'</div>'+
+      '<div class="c-stats"><span class="hp-v">生命 '+c.hp+'</span><span class="san-v">理智 '+c.san+'</span></div>'+
+    '</div>';
+  }).join('');
+  $id('screen-title').innerHTML =
+    '<div class="game-title">深 渊 回 响</div>'+
+    '<div class="game-sub">ECHOES OF THE ABYSS · 暗黑克苏鲁 Roguelike 卡牌 Demo</div>'+
+    '<div style="margin:2px 0">'+eyeSvg(110)+'</div>'+
+    '<div class="rune-line">ᚠ ᚢ ᚦ ᚨ ᚱ ᚲ ᚷ ᚹ ᚺ ᚾ ᛁ ᛃ</div>'+
+    '<div class="title-rules">每回合3点能量，抽5张牌 · 生命与理智任一归零即败 · 护盾无法抵挡理智伤害 · 牌组只增不减 ·<br>第一层固定节点：事件 → 战斗 → 事件 → 战斗 → 守关战 · 敌人永远提前1回合公开意图 · 选择你的调查者，进入第一层。</div>'+
+    '<div id="char-row">'+chars+'</div>';
+}
+
+function chooseChar(key){
+  const c = CHARACTERS[key];
+  S.charKey = key;
+  S.player = {
+    hp:c.hp, maxHp:c.hp, san:c.san, maxSan:c.san,
+    energy:0, block:0, dead:false, firstAttack:false, sanTrig:0,
+    deck: STARTER_DECKS[key].map(newCard), draw:[], discard:[], hand:[]
+  };
+  S.nodeIndex = 0; S.usedEvents = []; LOGS.length = 0;
+  $id('screen-title').classList.add('hidden');
+  $id('screen-game').classList.remove('hidden');
+  log('你——'+c.title+' '+c.name+'——推开了那扇不该推开的门。','l-hl');
+  log('第一层开始。节点顺序：事件 → 战斗 → 事件 → 战斗 → 守关战。');
+  nextNode();
+}
+
+/* ---------------- 节点推进 ---------------- */
+function nextNode(){
+  if(P().dead) return;
+  S.nodeIndex++;
+  if(S.nodeIndex > 5){ showVictory(); return; }
+  const t = NODES[S.nodeIndex-1];
+  if(t === 'event') startEvent();
+  else startBattle(t === 'guard');
+}
+
+/* ---------------- 事件 ---------------- */
+function startEvent(){
+  S.phase = 'event';
+  const candidates = EVENTS.filter(function(e){ return S.usedEvents.indexOf(e.key) < 0; });
+  const ev = randFrom(candidates);
+  S.usedEvents.push(ev.key);
+  S.pendingEvent = {ev:ev, optIdx:-1, resultText:''};
+  const opts = ev.options.map(function(o,i){
+    return '<button class="opt-btn" onclick="pickEventOption('+i+')"><span class="o-label">'+o.label+'</span><br><span class="o-desc">'+o.desc+'</span></button>';
+  }).join('');
+  $id('modal-layer').classList.remove('hidden');
+  $id('modal-layer').innerHTML =
+    '<div class="modal"><h2>'+ev.title+'</h2><div class="m-sub">— 事 件 —</div>'+
+    '<div class="rune-line" style="margin-bottom:10px">ᛝ ᛉ ᛝ ᛉ ᛝ ᛉ ᛝ</div>'+
+    '<div class="m-desc">'+ev.desc+'</div>'+opts+'</div>';
+  renderHUD();
+}
+function pickEventOption(i){
+  const st = S.pendingEvent, ev = st.ev, o = ev.options[i];
+  st.optIdx = i;
+  let extra = '';
+  if(o.hp){
+    if(o.hp < 0){ P().hp = Math.max(0, P().hp + o.hp); log('失去 '+(-o.hp)+' 点生命','l-bad'); }
+    else { P().hp = Math.min(P().maxHp, P().hp + o.hp); log('恢复 '+o.hp+' 点生命','l-good'); }
+  }
+  if(o.san){
+    if(o.san < 0){ loseSanity(-o.san, 'event'); }
+    else { P().san = Math.min(P().maxSan, P().san + o.san); log('恢复 '+o.san+' 点理智','l-good'); }
+  }
+  if(o.gamble){
+    if(Math.random() < 0.5){ P().san = Math.min(P().maxSan, P().san + 15); log('恢复 15 点理智','l-good'); st.resultText = o.resultGood; }
+    else { loseSanity(10, 'event'); st.resultText = o.resultBad; }
+  } else {
+    st.resultText = o.result;
+  }
+  if(P().dead){ showGameOver(); return; }
+  if(o.reward === 'rare3'){
+    S.rewardCtx = {type:'event'};
+    openReward(rollRewards(3, false, true), '事件馈赠 · 从3张稀有牌中选择1张加入牌组');
+    return;
+  }
+  if(o.reward === 'randomNormal'){
+    const k = randFrom(POOL.normal);
+    P().deck.push(newCard(k));
+    extra = '<br>你获得了「'+CARD_DB[k].name+'」。';
+    log('获得卡牌：'+CARD_DB[k].name,'l-good');
+  }
+  if(o.reward === 'curse'){
+    P().deck.push(newCard('whisper_curse'));
+    extra = '<br>「蚀心低语」混入了你的牌组。';
+    log('「蚀心低语」混入了牌组','l-mad');
+  }
+  showEventResult(st.resultText + extra);
+}
+function showEventResult(text){
+  renderHUD();
+  $id('modal-layer').classList.remove('hidden');
+  $id('modal-layer').innerHTML =
+    '<div class="modal"><h2>'+S.pendingEvent.ev.title+'</h2><div class="m-sub">— 结 局 —</div>'+
+    '<div class="m-result">'+text+'</div>'+
+    '<button class="restart-btn" onclick="continueEvent()">继续前行</button></div>';
+}
+function continueEvent(){
+  $id('modal-layer').classList.add('hidden');
+  nextNode();
+}
+
+/* ---------------- 奖励 ---------------- */
+function rollCardByRarity(){
+  const r = Math.random();
+  if(r < 0.6) return randFrom(POOL.normal);
+  if(r < 0.9) return randFrom(POOL.rare);
+  return randFrom(POOL.epic);
+}
+function rollRewards(count, guaranteeRare, rareOnly){
+  const keys = [];
+  let guard = false, safety = 0;
+  while(keys.length < count && safety++ < 200){
+    let k;
+    if(rareOnly){ k = randFrom(POOL.rare); }
+    else if(guaranteeRare && !guard){ k = randFrom(POOL.rare.concat(POOL.epic)); guard = true; }
+    else { k = rollCardByRarity(); }
+    if(keys.indexOf(k) < 0) keys.push(k);
+  }
+  return keys;
+}
+function openReward(cardKeys, title){
+  S.phase = 'reward';
+  S.rewardCards = cardKeys;
+  const cards = cardKeys.map(function(k,i){ return cardHTML(CARD_DB[k], 'pickReward('+i+')'); }).join('');
+  $id('modal-layer').classList.remove('hidden');
+  $id('modal-layer').innerHTML =
+    '<div class="modal"><h2>战利品</h2><div class="m-sub">'+title+'</div>'+
+    '<div class="m-desc">牌组只增不减。选中的牌将加入你的牌组。</div>'+
+    '<div class="reward-row">'+cards+'</div>'+
+    '<button class="skip-btn" onclick="skipReward()">放弃（什么都不拿）</button></div>';
+}
+function pickReward(i){
+  const k = S.rewardCards[i];
+  P().deck.push(newCard(k));
+  log('获得卡牌：「'+CARD_DB[k].name+'」','l-good');
+  afterReward();
+}
+function skipReward(){ log('你放弃了奖励。'); afterReward(); }
+function afterReward(){
+  const fromEvent = (S.rewardCtx && S.rewardCtx.type === 'event');
+  $id('modal-layer').classList.add('hidden');
+  S.rewardCtx = null;
+  if(fromEvent){
+    showEventResult(S.pendingEvent.resultText + '<br>你将选中的秘密收进了行囊。');
+  } else {
+    nextNode();
+  }
+}
+
+/* ---------------- 战斗 ---------------- */
+function mkEnemy(key){
+  const d = ENEMY_DB[key];
+  return {key:d.key, name:d.name, tier:d.tier, mech:d.mech, hp:d.hp, maxHp:d.hp, block:0, atkBuff:0, moveCount:0, nextIntent:null};
+}
+function startBattle(isGuard){
+  S.phase = 'battle';
+  S.pendingCard = null;
+  let group;
+  if(S.nodeIndex === 2){
+    group = [mkEnemy(randFrom(['ghoul','crawler','cultist']))];
+  } else if(S.nodeIndex === 4){
+    group = shuffle(['ghoul','crawler','cultist','deepone','wraith']).slice(0,2).map(mkEnemy);
+  } else {
+    group = [mkEnemy('boss')];
+  }
+  S.battle = {enemies:group, turn:1, isGuard:!!isGuard};
+  const p = P();
+  p.draw = shuffle(p.deck.slice());
+  p.discard = []; p.hand = [];
+  p.energy = 3; p.block = 0; p.firstAttack = false; p.sanTrig = 0;
+  if(S.charKey === 'gravedigger'){ p.block = 4; log('亡者之躯：获得4点护盾','l-good'); }
+  group.forEach(function(en){ en.nextIntent = computeIntent(en); });
+  for(const en of group){
+    if(en.key === 'wraith'){ en.block = 6; log('缚灵的虚体散发出寒气：获得6点护盾','l-mad'); }
+  }
+  log(isGuard ? '守关战开始：'+group[0].name+' 睁开了它全部的眼睛。' : '战斗开始：'+group.map(function(e){ return e.name; }).join(' 与 ')+'。','l-hl');
+  drawCards(5);
+  renderAll();
+}
+function drawCards(n){
+  const p = P();
+  for(let i=0;i<n;i++){
+    if(p.hand.length >= 10){ log('手牌已满（上限10张），无法再抽。'); break; }
+    if(p.draw.length === 0){
+      if(p.discard.length === 0){ log('牌库已空，无法再抽。'); break; }
+      p.draw = shuffle(p.discard); p.discard = [];
+      log('弃牌堆洗回抽牌堆。');
+    }
+    p.hand.push(p.draw.pop());
+  }
+}
+function cardNeedsTarget(c){
+  const alive = S.battle.enemies.filter(function(e){ return e.hp > 0; });
+  return !!(c.effects.damage) && alive.length > 1;
+}
+function onCardClick(idx){
+  if(S.phase !== 'battle' || P().dead) return;
+  const inst = P().hand[idx];
+  if(!inst) return;
+  const c = CARD_DB[inst.key];
+  if(P().energy < c.cost){ log('能量不足，无法打出「'+c.name+'」。','l-bad'); return; }
+  if(cardNeedsTarget(c)){
+    if(S.pendingCard && S.pendingCard.uid === inst.uid){ cancelTarget(); return; }
+    S.pendingCard = inst;
+    renderAll();
+    return;
+  }
+  resolveCard(inst, firstAliveIdx());
+}
+function firstAliveIdx(){
+  return S.battle.enemies.findIndex(function(e){ return e.hp > 0; });
+}
+function cancelTarget(){ S.pendingCard = null; renderAll(); }
+function onEnemyClick(idx){
+  if(S.phase !== 'battle' || !S.pendingCard) return;
+  const en = S.battle.enemies[idx];
+  if(!en || en.hp <= 0) return;
+  const inst = S.pendingCard;
+  S.pendingCard = null;
+  resolveCard(inst, idx);
+}
+function resolveCard(inst, targetIdx){
+  const p = P(), c = CARD_DB[inst.key];
+  p.energy -= c.cost;
+  p.hand = p.hand.filter(function(x){ return x.uid !== inst.uid; });
+  p.discard.push(inst);
+  log('你打出了「'+c.name+'」。');
+  applyEffects(c, targetIdx);
+  if(!p.dead) checkBattleEnd();
+  renderAll();
+}
+function applyEffects(c, targetIdx){
+  const p = P(), e = c.effects, inv = (S.charKey === 'investigator');
+  if(e.selfHp){
+    p.hp = Math.max(0, p.hp - e.selfHp);
+    log('失去 '+e.selfHp+' 点生命','l-bad');
+    if(checkLoss()) return;
+  }
+  if(e.selfSanity){
+    loseSanity(e.selfSanity, 'card');
+    if(p.dead) return;
+  }
+  function tryBonus(d){
+    if(inv && !p.firstAttack){ p.firstAttack = true; log('洞察触发：伤害 +3','l-good'); return d + 3; }
+    return d;
+  }
+  if(e.damage){
+    const en = S.battle.enemies[targetIdx];
+    dealDamageToEnemy(en, tryBonus(e.damage));
+    if(p.dead) return;
+  }
+  if(e.damageAll){
+    const d = tryBonus(e.damageAll);
+    S.battle.enemies.forEach(function(en){ if(en.hp > 0) dealDamageToEnemy(en, d); });
+    if(p.dead) return;
+  }
+  if(e.bonusNoBlock){
+    const en = S.battle.enemies[targetIdx];
+    if(en && en.hp > 0 && en.block <= 0) dealDamageToEnemy(en, e.bonusNoBlock);
+  }
+  if(e.block){ p.block += e.block; log('获得 '+e.block+' 点护盾','l-good'); }
+  if(e.sanityGain){
+    p.san = Math.min(p.maxSan, p.san + e.sanityGain);
+    log('恢复 '+e.sanityGain+' 点理智','l-good');
+  }
+  if(e.draw) drawCards(e.draw);
+  if(e.energy){ p.energy += e.energy; log('获得 '+e.energy+' 点能量','l-good'); }
+}
+function dealDamageToEnemy(en, d){
+  if(!en || en.hp <= 0) return;
+  if(en.block > 0){
+    const ab = Math.min(en.block, d);
+    en.block -= ab; d -= ab;
+    log(en.name+' 的护盾抵挡了 '+ab+' 点伤害。');
+  }
+  if(d > 0){
+    en.hp -= d;
+    log('对 '+en.name+' 造成 '+d+' 点伤害。','l-hl');
+  }
+  if(en.hp <= 0){ en.hp = 0; log(en.name+' 倒下了！','l-good'); }
+}
+function checkBattleEnd(){
+  if(S.phase !== 'battle') return false;
+  if(S.battle.enemies.every(function(en){ return en.hp <= 0; })){
+    log('战斗胜利！','l-good');
+    showBattleReward();
+    return true;
+  }
+  return false;
+}
+function showBattleReward(){
+  const isGuard = S.battle.isGuard;
+  S.rewardCtx = {type:'battle'};
+  const cards = rollRewards(3, isGuard, false);
+  const title = (isGuard ? '守关战胜利 · 层奖励（必含至少1张稀有以上）' : '战斗胜利 · 从3张牌中选择1张加入牌组（或放弃）');
+  openReward(cards, title);
+}
+
+/* ---------------- 玩家受伤 / 理智 ---------------- */
+function hitPlayer(d){
+  const p = P();
+  if(p.block > 0){
+    const ab = Math.min(p.block, d);
+    p.block -= ab; d -= ab;
+    log('护盾抵挡了 '+ab+' 点伤害。');
+  }
+  if(d > 0){
+    p.hp -= d;
+    log('你受到 '+d+' 点伤害。','l-bad');
+  }
+  checkLoss();
+}
+function loseSanity(n, src){
+  const p = P();
+  if(n <= 0 || p.dead) return;
+  p.san -= n;
+  log('失去 '+n+' 点理智','l-mad');
+  if(S.charKey === 'poet' && !p.dead && p.sanTrig < 2){
+    p.sanTrig++;
+    log('痛苦灵感触发：抽1张牌。','l-good');
+    drawCards(1);
+  }
+  checkLoss();
+}
+function checkLoss(){
+  const p = P();
+  if(p.hp <= 0){ p.dead = true; showGameOver('生命归零，你的躯体成了这栋建筑新的地基。'); return true; }
+  if(p.san <= 0){ p.dead = true; showGameOver('理智崩解，你笑着走进了墙里，再也没有出来。'); return true; }
+  return false;
+}
+
+/* ---------------- 敌人回合 ---------------- */
+function onEndTurn(){
+  if(S.phase !== 'battle' || P().dead) return;
+  S.pendingCard = null;
+  const p = P();
+  p.discard.push.apply(p.discard, p.hand);
+  p.hand = [];
+  enemyPhase();
+  if(p.dead) return;
+  S.battle.turn++;
+  startPlayerTurn();
+  renderAll();
+}
+function enemyPhase(){
+  const p = P();
+  S.battle.enemies.forEach(function(en){ if(en.hp > 0) en.block = 0; });
+  for(const en of S.battle.enemies){
+    if(en.hp <= 0) continue;
+    const it = en.nextIntent;
+    log(en.name+' 行动：'+it.label+'。');
+    if(it.blk){ en.block += it.blk; }
+    if(it.buff){ en.atkBuff += it.buff; log(en.name+' 的攻击被强化了！','l-bad'); }
+    if(it.curse){ p.discard.push(newCard('whisper_curse')); log('「蚀心低语」混入了你的弃牌堆！','l-mad'); }
+    if(it.heal){ en.hp = Math.min(en.maxHp, en.hp + it.heal); }
+    if(it.dmg){
+      const d = it.dmg + en.atkBuff;
+      if(en.atkBuff > 0) log('强化生效！','l-bad');
+      en.atkBuff = 0;
+      hitPlayer(d);
+      if(p.dead) return;
+    }
+    if(it.san){
+      loseSanity(it.san, 'enemy');
+      if(p.dead) return;
+    }
+    if(en.key === 'crawler' && en.hp > 0){
+      en.hp = Math.min(en.maxHp, en.hp + 2);
+      log(en.name+' 的黏液再生恢复了2点生命。');
+    }
+    en.moveCount++;
+    en.nextIntent = computeIntent(en);
+  }
+}
+function startPlayerTurn(){
+  const p = P();
+  p.block = 0;
+  if(S.charKey === 'gravedigger'){ p.block = 4; log('亡者之躯：获得4点护盾','l-good'); }
+  p.energy = 3; p.firstAttack = false; p.sanTrig = 0;
+  drawCards(5);
+}
+
+/* ---------------- 渲染 ---------------- */
+function renderAll(){ renderHUD(); renderEnemies(); renderHand(); renderLog(); }
+function renderHUD(){
+  const p = P(); if(!p) return;
+  const c = CHARACTERS[S.charKey];
+  const nodes = NODES.map(function(t,i){
+    const cls = (i+1 < S.nodeIndex) ? 'done' : (i+1 === S.nodeIndex ? 'cur' : '');
+    return '<div class="node-dot '+cls+'"><div class="d"></div>'+NODE_LABELS[i]+'</div>';
+  }).join('<div style="color:#3a4a3a">—</div>');
+  $id('hud').innerHTML =
+    '<div class="hud-char">'+eyeSvg(42)+' '+c.title+' · '+c.name+'</div>'+
+    '<div class="bar-wrap"><div class="bar-label"><span>生命</span><span>'+p.hp+' / '+p.maxHp+'</span></div>'+
+      '<div class="bar"><div class="fill hp-f" style="width:'+(p.hp/p.maxHp*100)+'%"></div></div></div>'+
+    '<div class="bar-wrap"><div class="bar-label"><span>理智</span><span>'+p.san+' / '+p.maxSan+'</span></div>'+
+      '<div class="bar"><div class="fill san-f" style="width:'+(p.san/p.maxSan*100)+'%"></div></div></div>'+
+    '<div class="chip block-chip">护盾 '+p.block+'</div>'+
+    '<div class="energy-box"><span style="font-size:12px;color:#8a9a82">能量</span>'+
+      [0,1,2].map(function(i){ return '<div class="energy-pip'+(i < p.energy ? ' on' : '')+'"></div>'; }).join('')+
+      '<span class="energy-num">'+p.energy+'</span></div>'+
+    '<div id="node-track">'+nodes+'</div>'+
+    '<div id="turn-info">'+(S.battle ? '第 '+S.battle.turn+' 回合' : '第 1 层')+'</div>'+
+    '<button class="skip-btn" style="margin:0;padding:4px 12px;font-size:11px" onclick="restart()">重新开始</button>';
+  $id('deck-counts').innerHTML = '抽牌堆 '+p.draw.length+' · 弃牌堆 '+p.discard.length+' · 牌组 '+p.deck.length;
+  $id('cancel-target').classList.toggle('hidden', !S.pendingCard);
+}
+function intentHTML(it){
+  let tags = '';
+  if(it.dmg) tags += '<span class="intent-tag '+it.cls+'">斩 '+it.dmg+'</span>';
+  if(it.san) tags += '<span class="intent-tag it-san">蚀 '+it.san+'</span>';
+  if(it.blk) tags += '<span class="intent-tag it-blk">盾 '+it.blk+'</span>';
+  if(it.heal) tags += '<span class="intent-tag it-heal">愈 '+it.heal+'</span>';
+  if(it.buff) tags += '<span class="intent-tag it-buff">力 +'+it.buff+'</span>';
+  if(it.curse) tags += '<span class="intent-tag it-curse">咒</span>';
+  return tags + '<div class="it-desc">'+it.desc+'</div>';
+}
+function renderEnemies(){
+  const zone = $id('enemy-zone');
+  if(!S.battle){ zone.innerHTML = ''; return; }
+  const banner = S.pendingCard
+    ? '<div id="intent-banner" style="color:#d98880">打出「'+CARD_DB[S.pendingCard.key].name+'」—— 请点击选择目标</div>'
+    : '<div id="intent-banner">敌人永远提前1回合公开意图</div>';
+  zone.innerHTML = banner + S.battle.enemies.map(function(en,i){
+    const cls = 'enemy-card' + (en.hp <= 0 ? ' dead' : '') + (S.pendingCard && en.hp > 0 ? ' targetable' : '');
+    return '<div class="'+cls+'" onclick="onEnemyClick('+i+')">'+
+      '<div><span class="e-name">'+en.name+'</span><span class="e-tier">'+en.tier+'</span></div>'+
+      '<div class="e-mech">'+en.mech+'</div>'+
+      '<div class="e-hpbar"><div class="bar-label"><span>生命</span><span>'+en.hp+' / '+en.maxHp+'</span></div>'+
+        '<div class="bar"><div class="fill hp-f" style="width:'+(en.hp/en.maxHp*100)+'%"></div></div></div>'+
+      '<div class="e-block">'+(en.block > 0 ? '护盾 '+en.block : '')+(en.atkBuff > 0 ? ' · 攻击 +'+en.atkBuff : '')+'</div>'+
+      '<div class="e-intent"><div style="font-size:10.5px;color:#6a7a64;margin-bottom:3px">下回合意图</div>'+intentHTML(en.nextIntent)+'</div>'+
+    '</div>';
+  }).join('');
+}
+function cardHTML(c, onclick){
+  return '<div class="card t-'+c.type+'" '+(onclick ? 'onclick="'+onclick+'"' : '')+'>'+
+    '<div class="card-head"><div class="card-cost">'+c.cost+'</div><div class="card-name">'+c.name+'</div></div>'+
+    '<div class="card-meta">'+c.type+' · <span class="r-'+c.rarity+'">'+c.rarity+'</span></div>'+
+    '<div class="card-desc">'+c.description+'</div>'+
+    '<div class="card-foot">ᚠᚢᚦ</div></div>';
+}
+function renderHand(){
+  const area = $id('hand-area');
+  if(!S.battle){ area.innerHTML = ''; return; }
+  area.innerHTML = P().hand.map(function(inst,i){
+    const c = CARD_DB[inst.key];
+    const disabled = P().energy < c.cost || S.phase !== 'battle';
+    let html = cardHTML(c, 'onCardClick('+i+')');
+    if(disabled) html = html.replace('class="card t-', 'class="card disabled t-');
+    return html;
+  }).join('');
+}
+
+/* ---------------- 终局 ---------------- */
+function showGameOver(reason){
+  S.phase = 'over';
+  $id('modal-layer').classList.remove('hidden');
+  $id('modal-layer').innerHTML =
+    '<div class="modal"><div class="big-verdict verdict-lose">调查终止</div>'+
+    '<div class="m-sub">— 你 失 败 了 —</div><div class="m-desc" style="text-align:center">'+reason+'</div>'+
+    '<div class="m-result">深渊回响着你的名字。牌组与数值已全部重置。</div>'+
+    '<button class="restart-btn" onclick="restart()">重新开始</button></div>';
+}
+function showVictory(){
+  S.phase = 'victory';
+  const p = P();
+  $id('modal-layer').classList.remove('hidden');
+  $id('modal-layer').innerHTML =
+    '<div class="modal"><div class="big-verdict verdict-win">第一层已通关</div>'+
+    '<div class="m-sub">— 守 关 战 胜 利 —</div>'+
+    '<div class="m-result">巨眼的瞳孔收缩成针尖，整层建筑在你身后坍缩成一张发潮的旧地图。<br>'+
+    '（完整版中你将带着不恢复的 HP 与理智进入更深的第二层；Demo 到此结束。）</div>'+
+    '<div class="m-desc" style="text-align:center">剩余生命 '+p.hp+'/'+p.maxHp+' · 剩余理智 '+p.san+'/'+p.maxSan+' · 牌组 '+p.deck.length+' 张</div>'+
+    '<button class="restart-btn" onclick="restart()">再入深渊</button></div>';
+}
+function restart(){
+  S.phase = 'title'; S.charKey = null; S.player = null; S.battle = null;
+  S.pendingCard = null; S.pendingEvent = null; S.rewardCtx = null; S.nodeIndex = 0;
+  S.usedEvents = []; LOGS.length = 0;
+  renderTitle();
+}
+
+renderTitle();
+</script>
+</body>
+</html>
